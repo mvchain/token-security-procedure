@@ -7,7 +7,9 @@ import lombok.extern.log4j.Log4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.web3j.crypto.CipherException;
 
+import java.io.IOException;
 import java.math.BigInteger;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -28,25 +30,37 @@ public class ProjectJob {
     OrderService orderService;
 
     @Scheduled(cron = "*/5 * * * * ?")
-    public void newAccount() throws Exception {
+    public void newAccount() {
         Mission mission = orderService.accountMission();
         if (null != mission && jobMap.get(mission.getId()) == null) {
             jobMap.put(mission.getId(), true);
             for (int i = mission.getComplete(); i < mission.getTotal(); i++) {
-                orderService.newAccount(mission.getTokenType(), mission);
+                try {
+                    orderService.newAccount(mission.getTokenType(), mission);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                } catch (CipherException e) {
+                    e.printStackTrace();
+                }
             }
+            jobMap.remove(mission.getId());
         }
     }
 
     @Scheduled(cron = "*/5 * * * * ?")
-    public void sign() throws Exception {
+    public void sign() {
         Mission mission = orderService.signMission();
         if (null != mission && jobMap.get(mission.getId()) == null) {
             jobMap.put(mission.getId(), true);
             List<Orders> orders = orderService.getOrders(mission.getId());
             for (Orders order : orders) {
-                orderService.updateOrdersSig(order, mission);
+                try {
+                    orderService.updateOrdersSig(order, mission);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
             }
+            jobMap.remove(mission.getId());
         }
     }
 
