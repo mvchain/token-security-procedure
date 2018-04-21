@@ -55,7 +55,11 @@ public class ProjectJob {
             List<Orders> orders = orderService.getOrders(mission.getId());
             for (Orders order : orders) {
                 try {
-                    orderService.updateOrdersSig(order, mission);
+                    if ("ETH".equalsIgnoreCase(order.getTokenType())) {
+                        orderService.updateEthOrdersSig(order, mission);
+                    } else if ("MVC".equalsIgnoreCase(order.getTokenType())) {
+                        orderService.updateMvcOrderSig(order, mission);
+                    }
                 } catch (Exception e) {
                     e.printStackTrace();
                 }

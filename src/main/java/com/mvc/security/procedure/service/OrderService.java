@@ -18,6 +18,12 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert;
+import org.web3j.abi.FunctionEncoder;
+import org.web3j.abi.TypeReference;
+import org.web3j.abi.datatypes.Address;
+import org.web3j.abi.datatypes.Function;
+import org.web3j.abi.datatypes.Type;
+import org.web3j.abi.datatypes.generated.Uint256;
 import org.web3j.crypto.*;
 import org.web3j.protocol.Web3j;
 import org.web3j.protocol.admin.Admin;
@@ -30,10 +36,7 @@ import org.web3j.utils.Numeric;
 import java.io.File;
 import java.io.IOException;
 import java.math.BigInteger;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import static org.web3j.tx.Contract.GAS_LIMIT;
@@ -61,6 +64,9 @@ public class OrderService {
     Admin admin;
     @Value("${keyFile.path}")
     String folder;
+    @Value("${mvc.contract.mvc}")
+    String mvcContract;
+
     ObjectMapper objectMapper = new ObjectMapper();
 
     public Account getAdmin(Integer type) throws IOException, CipherException {
@@ -189,7 +195,7 @@ public class OrderService {
         missionMapper.updateByPrimaryKey(mission);
     }
 
-    public void updateOrdersSig(Orders order, Mission mission) throws Exception {
+    public void updateEthOrdersSig(Orders order, Mission mission) throws Exception {
         Account account = new Account();
         account.setAddress(order.getFromAddress());
         account = accountMapper.selectOne(account);
@@ -197,6 +203,25 @@ public class OrderService {
         Credentials ALICE = Credentials.create(ecKeyPair);
         BigInteger nonce = getNonce(web3j, account.getAddress());
         RawTransaction transaction = RawTransaction.createEtherTransaction(nonce, GAS_PRICE.divide(BigInteger.valueOf(10)), GAS_LIMIT, order.getToAddress(), Convert.toWei(order.getValue(), Convert.Unit.ETHER).toBigInteger());
+        byte[] signedMessage = TransactionEncoder.signMessage(transaction, ALICE);
+        String hexValue = Numeric.toHexString(signedMessage);
+        order.setSignature(hexValue);
+        orderMapper.updateByPrimaryKey(order);
+        mission.setComplete(mission.getComplete() + 1);
+        updateMission(mission);
+    }
+
+    public void updateMvcOrderSig(Orders order, Mission mission) throws Exception {
+        Account account = new Account();
+        account.setAddress(order.getFromAddress());
+        account = accountMapper.selectOne(account);
+        ECKeyPair ecKeyPair = ECKeyPair.create(new BigInteger(account.getPrivateKey()));
+        Credentials ALICE = Credentials.create(ecKeyPair);
+        BigInteger nonce = getNonce(web3j, account.getAddress());
+        Function function = new Function("transfer", Arrays.<Type>asList(new Address(order.getToAddress()), new Uint256(Convert.toWei(order.getValue(), Convert.Unit.ETHER).toBigInteger())), Collections.<TypeReference<?>>emptyList());
+        String data = FunctionEncoder.encode(function);
+        String init = mvcContract + data;
+        RawTransaction transaction = RawTransaction.createContractTransaction(nonce, GAS_PRICE.divide(BigInteger.valueOf(10)), GAS_LIMIT, BigInteger.ZERO, "");
         byte[] signedMessage = TransactionEncoder.signMessage(transaction, ALICE);
         String hexValue = Numeric.toHexString(signedMessage);
         order.setSignature(hexValue);
