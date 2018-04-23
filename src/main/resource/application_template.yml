@@ -1,0 +1,53 @@
+logging.level:
+        tk.mybatis: DEBUG
+spring:
+    messages.basename: messages
+    aop:
+      proxy-target-class: true
+    application:
+        name: token-security-procedure
+    jackson:
+        date-format: yyyy-MM-dd HH:mm:ss
+        time-zone: GMT+8
+        default-property-inclusion: non_null
+    datasource:
+            name: test
+            url: jdbc:mysql://192.168.15.31:3306/token_security_procedure?useUnicode=true&characterEncoding=UTF8
+            username: root
+            password: 123456
+            # 使用druid数据源
+            type: com.alibaba.druid.pool.DruidDataSource
+            driver-class-name: com.mysql.jdbc.Driver
+            filters: stat
+            maxActive: 20
+            initialSize: 1
+            maxWait: 60000
+            minIdle: 1
+            timeBetweenEvictionRunsMillis: 60000
+            minEvictableIdleTimeMillis: 300000
+            validationQuery: select 'x'
+            testWhileIdle: true
+            testOnBorrow: false
+            testOnReturn: false
+            poolPreparedStatements: true
+            maxOpenPreparedStatements: 20
+
+server:
+    port: 8099
+
+swagger:
+    basepackage: com.mvc.security.procedure
+    service:
+        name: token sell security procedure
+        description: token security procedure
+        developer: qiyichen
+
+mybatis.basepackage: com.mvc.security.procedure
+cors.allowedOrigin: '*'
+
+keyFile.path: 'C:\Users\ethands\AppData\Roaming\Ethereum\rinkeby\keystore'
+
+mvc:
+  geth.url: http://192.168.213.170:8545
+  contract:
+    mvc: 0x513306aF847d12aA868e7E34132207605fc4f85F

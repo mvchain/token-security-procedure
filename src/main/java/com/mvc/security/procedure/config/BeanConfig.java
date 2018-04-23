@@ -4,6 +4,7 @@ import okhttp3.Interceptor;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.web3j.protocol.Web3j;
@@ -23,7 +24,9 @@ import java.util.concurrent.TimeUnit;
 @Configuration
 public class BeanConfig {
 
-    public String WALLET_SERVICE = "http://localhost:8545";
+
+    @Value("${mvc.geth.url}")
+    public String WALLET_SERVICE;
 
     @Bean
     public OkHttpClient okHttpClient() throws IOException {

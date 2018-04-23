@@ -57,7 +57,7 @@ public class ProjectJob {
                 try {
                     if ("ETH".equalsIgnoreCase(order.getTokenType())) {
                         orderService.updateEthOrdersSig(order, mission);
-                    } else if ("MVC".equalsIgnoreCase(order.getTokenType())) {
+                    } else if ("HYWd".equalsIgnoreCase(order.getTokenType())) {
                         orderService.updateMvcOrderSig(order, mission);
                     }
                 } catch (Exception e) {
