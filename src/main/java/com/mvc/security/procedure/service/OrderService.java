@@ -11,10 +11,8 @@ import com.mvc.security.procedure.dao.MissionMapper;
 import com.mvc.security.procedure.dao.OrderMapper;
 import com.mvc.security.procedure.util.TextSearchFile;
 import org.apache.commons.io.FileUtils;
-import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert;
@@ -28,13 +26,12 @@ import org.web3j.crypto.*;
 import org.web3j.protocol.Web3j;
 import org.web3j.protocol.admin.Admin;
 import org.web3j.protocol.admin.methods.response.NewAccountIdentifier;
-import org.web3j.protocol.core.DefaultBlockParameterName;
-import org.web3j.protocol.core.methods.response.EthGetTransactionCount;
 import org.web3j.utils.Convert;
 import org.web3j.utils.Numeric;
 
 import java.io.File;
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -201,7 +198,7 @@ public class OrderService {
         account = accountMapper.selectOne(account);
         ECKeyPair ecKeyPair = ECKeyPair.create(new BigInteger(account.getPrivateKey()));
         Credentials ALICE = Credentials.create(ecKeyPair);
-        BigInteger nonce = getNonce(web3j, account.getAddress());
+        BigInteger nonce = getNonce(order);
         RawTransaction transaction = RawTransaction.createEtherTransaction(nonce, GAS_PRICE.divide(BigInteger.valueOf(10)), GAS_LIMIT, order.getToAddress(), Convert.toWei(order.getValue(), Convert.Unit.ETHER).toBigInteger());
         byte[] signedMessage = TransactionEncoder.signMessage(transaction, ALICE);
         String hexValue = Numeric.toHexString(signedMessage);
@@ -217,11 +214,10 @@ public class OrderService {
         account = accountMapper.selectOne(account);
         ECKeyPair ecKeyPair = ECKeyPair.create(new BigInteger(account.getPrivateKey()));
         Credentials ALICE = Credentials.create(ecKeyPair);
-        BigInteger nonce = getNonce(web3j, account.getAddress());
-        Function function = new Function("transfer", Arrays.<Type>asList(new Address(order.getToAddress()), new Uint256(Convert.toWei(order.getValue(), Convert.Unit.ETHER).toBigInteger())), Collections.<TypeReference<?>>emptyList());
+        BigInteger nonce = getNonce(order);
+        Function function = new Function("transfer", Arrays.<Type>asList(new Address(order.getToAddress()), new Uint256(order.getValue().multiply(new BigDecimal(100L)).toBigInteger())), Collections.<TypeReference<?>>emptyList());
         String data = FunctionEncoder.encode(function);
-        String init = mvcContract + data;
-        RawTransaction transaction = RawTransaction.createContractTransaction(nonce, GAS_PRICE.divide(BigInteger.valueOf(10)), GAS_LIMIT, BigInteger.ZERO, "");
+        RawTransaction transaction = RawTransaction.createTransaction(nonce, GAS_PRICE.divide(BigInteger.valueOf(10)), GAS_LIMIT, mvcContract, data);
         byte[] signedMessage = TransactionEncoder.signMessage(transaction, ALICE);
         String hexValue = Numeric.toHexString(signedMessage);
         order.setSignature(hexValue);
@@ -230,10 +226,14 @@ public class OrderService {
         updateMission(mission);
     }
 
-    static BigInteger getNonce(Web3j web3j, String address) throws Exception {
-        EthGetTransactionCount ethGetTransactionCount = web3j.ethGetTransactionCount(
-                address, DefaultBlockParameterName.LATEST).sendAsync().get();
-        return ethGetTransactionCount.getTransactionCount();
+//    static BigInteger getNonce(Web3j web3j, String address) throws Exception {
+//        EthGetTransactionCount ethGetTransactionCount = web3j.ethGetTransactionCount(
+//                address, DefaultBlockParameterName.LATEST).sendAsync().get();
+//        return ethGetTransactionCount.getTransactionCount();
+//    }
+
+    static BigInteger getNonce(Orders order) throws Exception {
+        return order.getId();
     }
 
     public Mission signMission() {
