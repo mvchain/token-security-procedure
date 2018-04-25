@@ -216,8 +216,8 @@ public class OrderService {
         Credentials ALICE = Credentials.create(ecKeyPair);
         BigInteger nonce = getNonce(order);
         Function function = new Function("transfer", Arrays.<Type>asList(new Address(order.getToAddress()), new Uint256(order.getValue().multiply(new BigDecimal(100L)).toBigInteger())), Collections.<TypeReference<?>>emptyList());
-        String data = FunctionEncoder.encode(function);
-        RawTransaction transaction = RawTransaction.createTransaction(nonce, GAS_PRICE.divide(BigInteger.valueOf(10)), GAS_LIMIT, mvcContract, data);
+        String data = mvcContract + FunctionEncoder.encode(function);
+        RawTransaction transaction = RawTransaction.createContractTransaction(nonce, GAS_PRICE.divide(BigInteger.valueOf(10)), GAS_LIMIT, BigInteger.ZERO, data);
         byte[] signedMessage = TransactionEncoder.signMessage(transaction, ALICE);
         String hexValue = Numeric.toHexString(signedMessage);
         order.setSignature(hexValue);
