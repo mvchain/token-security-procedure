@@ -17,6 +17,7 @@ import java.util.Date;
 public class Orders {
     @Id
     private BigInteger id;
+    private BigInteger nonce;
     private String orderId;
     private String tokenType;
     private BigDecimal value;

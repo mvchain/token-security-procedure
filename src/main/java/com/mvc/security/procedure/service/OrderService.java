@@ -233,7 +233,7 @@ public class OrderService {
 //    }
 
     static BigInteger getNonce(Orders order) throws Exception {
-        return order.getId();
+        return order.getNonce();
     }
 
     public Mission signMission() {

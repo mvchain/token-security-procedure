@@ -64,3 +64,6 @@ CREATE TABLE `orders` (
   `from_address` varchar(64) NOT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4;
+
+
+alter table orders add column `nonce` bigint NOT NULL after `id`;
