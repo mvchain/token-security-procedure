@@ -62,9 +62,6 @@ public class OrderService {
     Admin admin;
     @Value("${keyFile.path}")
     String folder;
-    @Value("${mvc.contract.mvc}")
-    String mvcContract;
-
     ObjectMapper objectMapper = new ObjectMapper();
 
     public Account getAdmin(Integer type) throws IOException, CipherException {
@@ -209,16 +206,18 @@ public class OrderService {
         updateMission(mission);
     }
 
-    public void updateMvcOrderSig(Orders order, Mission mission) throws Exception {
+    public void updateErc20OrderSig(Orders order, Mission mission, Map<String, String> tokenConfig) throws Exception {
         Account account = new Account();
         account.setAddress(order.getFromAddress());
         account = accountMapper.selectOne(account);
         ECKeyPair ecKeyPair = ECKeyPair.create(new BigInteger(account.getPrivateKey()));
         Credentials ALICE = Credentials.create(ecKeyPair);
         BigInteger nonce = getNonce(order);
-        Function function = new Function("transfer", Arrays.<Type>asList(new Address(order.getToAddress()), new Uint256(order.getValue().multiply(new BigDecimal(100L)).toBigInteger())), Collections.singletonList(new TypeReference<Bool>() {}));
+        // Transfer value to default format (without decimals), generally the Decimals is 18.
+        Uint256 value = new Uint256(order.getValue().multiply(new BigDecimal(Math.pow(10, Integer.parseInt(tokenConfig.get("decimals"))))).toBigInteger());
+        Function function = new Function("transfer", Arrays.<Type>asList(new Address(order.getToAddress()), value), Collections.singletonList(new TypeReference<Bool>() {}));
         String data = FunctionEncoder.encode(function);
-        RawTransaction transaction = RawTransaction.createTransaction(nonce, GAS_PRICE.divide(BigInteger.valueOf(10)), GAS_LIMIT, mvcContract, data);
+        RawTransaction transaction = RawTransaction.createTransaction(nonce, GAS_PRICE.divide(BigInteger.valueOf(10)), GAS_LIMIT, tokenConfig.get("address"), data);
         byte[] signedMessage = TransactionEncoder.signMessage(transaction, ALICE);
         String hexValue = Numeric.toHexString(signedMessage);
         order.setSignature(hexValue);

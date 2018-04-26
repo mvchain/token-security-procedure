@@ -12,7 +12,7 @@ spring:
         default-property-inclusion: non_null
     datasource:
             name: test
-            url: jdbc:mysql://192.168.15.31:3306/token_security_procedure?useUnicode=true&characterEncoding=UTF8
+            url: jdbc:mysql://192.168.15.31:3306/token_security_procedure_ywd?useUnicode=true&characterEncoding=UTF8
             username: root
             password: 123456
             # 使用druid数据源
@@ -45,9 +45,25 @@ swagger:
 mybatis.basepackage: com.mvc.security.procedure
 cors.allowedOrigin: '*'
 
-keyFile.path: 'C:\Users\ethands\AppData\Roaming\Ethereum\rinkeby\keystore'
+keyFile.path: 'C:\Users\ywd-pc\AppData\Roaming\Ethereum\rinkeby\keystore'
 
 mvc:
   geth.url: http://192.168.213.170:8545
-  contract:
-    mvc: 0x513306aF847d12aA868e7E34132207605fc4f85F
+#  geth.url: http://127.0.0.1:8545
+  erc20:
+    mvc:
+      address: ""
+      decimals: 18
+    enc:
+      address: "0xA17AB0a97A360A26049865159e9F7aAE554751FC"
+      decimals: 10
+    ywd:
+      address: "0xbCaFA41729a20fc3BC97Fb281E5F9B9118138100"
+      decimals: 11
+    hywd:
+      address: "0x513306aF847d12aA868e7E34132207605fc4f85F"
+      decimals: 2
+    fywd:
+      address: "0x756B20F28BDDB4a251E623De59c829d078fe0624"
+      decimals: 18
+
