@@ -54,9 +54,6 @@ mvc:
     mvc:
       address: ""
       decimals: 18
-    enc:
-      address: "0xA17AB0a97A360A26049865159e9F7aAE554751FC"
-      decimals: 10
     ywd:
       address: "0xbCaFA41729a20fc3BC97Fb281E5F9B9118138100"
       decimals: 11
