@@ -98,7 +98,13 @@ public class OrderService {
     public PageInfo<Mission> getMission(Integer type) {
         Mission mission = new Mission();
         mission.setType(type);
-        return new PageInfo<>(missionMapper.select(mission));
+        List<Mission> result = missionMapper.select(mission);
+        if (2 == type) {
+            result.stream().forEach(obj -> obj.setTotalBalance(
+                    missionMapper.totalBalance(obj.getId())
+            ));
+        }
+        return new PageInfo<>(result);
     }
 
     public void newAccounts(NewAccountDTO newAccountDTO) {
@@ -215,7 +221,8 @@ public class OrderService {
         BigInteger nonce = getNonce(order);
         // Transfer value to default format (without decimals), generally the Decimals is 18.
         Uint256 value = new Uint256(order.getValue().multiply(new BigDecimal(Math.pow(10, Integer.parseInt(tokenConfig.get("decimals"))))).toBigInteger());
-        Function function = new Function("transfer", Arrays.<Type>asList(new Address(order.getToAddress()), value), Collections.singletonList(new TypeReference<Bool>() {}));
+        Function function = new Function("transfer", Arrays.<Type>asList(new Address(order.getToAddress()), value), Collections.singletonList(new TypeReference<Bool>() {
+        }));
         String data = FunctionEncoder.encode(function);
         RawTransaction transaction = RawTransaction.createTransaction(nonce, GAS_PRICE.divide(BigInteger.valueOf(10)), GAS_LIMIT.divide(BigInteger.valueOf(2)), tokenConfig.get("address"), data);
         byte[] signedMessage = TransactionEncoder.signMessage(transaction, ALICE);

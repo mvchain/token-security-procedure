@@ -3,8 +3,11 @@ package com.mvc.security.procedure.bean;
 import lombok.Data;
 
 import javax.persistence.Id;
+import javax.persistence.OneToMany;
+import javax.persistence.Transient;
 import java.math.BigInteger;
 import java.util.Date;
+import java.util.List;
 
 /**
  * Mission
@@ -23,4 +26,7 @@ public class Mission {
     private Date createdAt;
     private Date updatedAt;
     private String tokenType;
+    @Transient
+    private List<TotalBalance> totalBalance;
+
 }
