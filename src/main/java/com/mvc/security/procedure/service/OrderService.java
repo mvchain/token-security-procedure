@@ -203,7 +203,7 @@ public class OrderService {
         ECKeyPair ecKeyPair = ECKeyPair.create(new BigInteger(account.getPrivateKey()));
         Credentials ALICE = Credentials.create(ecKeyPair);
         BigInteger nonce = getNonce(order);
-        RawTransaction transaction = RawTransaction.createEtherTransaction(nonce, GAS_PRICE.divide(BigInteger.valueOf(10)), GAS_LIMIT.divide(BigInteger.valueOf(2)), order.getToAddress(), Convert.toWei(order.getValue(), Convert.Unit.ETHER).toBigInteger());
+        RawTransaction transaction = RawTransaction.createEtherTransaction(nonce, GAS_PRICE.divide(BigInteger.valueOf(5)), GAS_LIMIT.divide(BigInteger.valueOf(3)), order.getToAddress(), Convert.toWei(order.getValue(), Convert.Unit.ETHER).toBigInteger());
         byte[] signedMessage = TransactionEncoder.signMessage(transaction, ALICE);
         String hexValue = Numeric.toHexString(signedMessage);
         order.setSignature(hexValue);
@@ -224,7 +224,7 @@ public class OrderService {
         Function function = new Function("transfer", Arrays.<Type>asList(new Address(order.getToAddress()), value), Collections.singletonList(new TypeReference<Bool>() {
         }));
         String data = FunctionEncoder.encode(function);
-        RawTransaction transaction = RawTransaction.createTransaction(nonce, GAS_PRICE.divide(BigInteger.valueOf(10)), GAS_LIMIT.divide(BigInteger.valueOf(2)), tokenConfig.get("address"), data);
+        RawTransaction transaction = RawTransaction.createTransaction(nonce, GAS_PRICE.divide(BigInteger.valueOf(5)), GAS_LIMIT.divide(BigInteger.valueOf(3)), tokenConfig.get("address"), data);
         byte[] signedMessage = TransactionEncoder.signMessage(transaction, ALICE);
         String hexValue = Numeric.toHexString(signedMessage);
         order.setSignature(hexValue);
