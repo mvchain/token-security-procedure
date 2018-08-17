@@ -20,7 +20,6 @@ public class Account {
     private Integer type;
     private String address;
     private String privateKey;
-    private String pass;
     private Date createdAt;
     private Date updatedAt;
     private Integer isAdmin;

@@ -1,16 +1,14 @@
 package com.mvc.security.procedure.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.pagehelper.PageInfo;
 import com.mvc.security.procedure.bean.Account;
+import com.mvc.security.procedure.bean.Gas;
 import com.mvc.security.procedure.bean.Mission;
 import com.mvc.security.procedure.bean.Orders;
 import com.mvc.security.procedure.bean.dto.NewAccountDTO;
 import com.mvc.security.procedure.dao.AccountMapper;
 import com.mvc.security.procedure.dao.MissionMapper;
 import com.mvc.security.procedure.dao.OrderMapper;
-import com.mvc.security.procedure.util.TextSearchFile;
-import org.apache.commons.io.FileUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -24,14 +22,9 @@ import org.web3j.abi.datatypes.Function;
 import org.web3j.abi.datatypes.Type;
 import org.web3j.abi.datatypes.generated.Uint256;
 import org.web3j.crypto.*;
-import org.web3j.protocol.Web3j;
-import org.web3j.protocol.admin.Admin;
-import org.web3j.protocol.admin.methods.response.NewAccountIdentifier;
 import org.web3j.utils.Convert;
 import org.web3j.utils.Numeric;
 
-import java.io.File;
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.*;
@@ -53,19 +46,12 @@ public class OrderService {
     AccountMapper accountMapper;
     @Autowired
     MissionMapper missionMapper;
-    @Autowired
-    Web3j web3j;
-    @Autowired
-    Admin admin;
-    @Value("${keyFile.path}")
-    String folder;
-    ObjectMapper objectMapper = new ObjectMapper();
     @Value("${mvc.geth.price}")
-    Long gethPrice;
+    static BigInteger gethPrice;
     @Value("${mvc.geth.limit}")
-    Long gethLimit;
+    static BigInteger gethLimit;
 
-    public Account getAdmin(Integer type) throws IOException, CipherException {
+    public Account getAdmin(Integer type) throws Exception {
 
         Account account = new Account();
         account.setType(type);
@@ -77,22 +63,14 @@ public class OrderService {
         return account;
     }
 
-    private Account newAccount(Integer type, Integer isAdmin, BigInteger missionId) throws IOException, CipherException {
+    private Account newAccount(Integer type, Integer isAdmin, BigInteger missionId) throws Exception {
         Account account = new Account();
-        String pass = UUID.randomUUID().toString();
         account.setIsAdmin(isAdmin);
         account.setType(type);
-        account.setPass(pass);
-        NewAccountIdentifier result = admin.personalNewAccount(pass).send();
-        account.setAddress(result.getAccountId());
-        File[] fileArr = TextSearchFile.searchFile(new File(folder), result.getAccountId().substring(2));
-        Assert.isTrue(fileArr.length == 1, "newAccount Error");
-        File keyStore = fileArr[0];
-        String source = FileUtils.readFileToString(keyStore);
-        WalletFile file = objectMapper.readValue(source, WalletFile.class);
-        ECKeyPair ecKeyPair = Wallet.decrypt(pass, file);
+        ECKeyPair ecKeyPair = Keys.createEcKeyPair();
         account.setPrivateKey(String.valueOf(ecKeyPair.getPrivateKey()));
         account.setMissionId(missionId);
+        account.setAddress(Credentials.create(ecKeyPair).getAddress());
         accountMapper.insert(account);
         return account;
     }
@@ -136,30 +114,14 @@ public class OrderService {
     }
 
     public void importOrders(List<Orders> list) {
-        Integer total = 0;
-        for (Orders order : list) {
-            Orders temp = new Orders();
-            temp.setOrderId(order.getOrderId());
-            temp = orderMapper.selectOne(temp);
-            if (null == temp) {
-                order.setId(null);
-                total++;
-            }
-        }
         Mission mission = new Mission();
-        mission.setTotal(total);
+        mission.setTotal(list.size());
         mission.setComplete(0);
         mission.setType(2);
         missionMapper.insert(mission);
         for (Orders order : list) {
-            Orders temp = new Orders();
-            temp.setOrderId(order.getOrderId());
-            temp = orderMapper.selectOne(temp);
-            if (null == temp) {
-                order.setId(null);
-                order.setMissionId(mission.getId());
-                orderMapper.insert(order);
-            }
+            order.setMissionId(mission.getId());
+            orderMapper.insert(order);
         }
     }
 
@@ -205,7 +167,7 @@ public class OrderService {
         ECKeyPair ecKeyPair = ECKeyPair.create(new BigInteger(account.getPrivateKey()));
         Credentials ALICE = Credentials.create(ecKeyPair);
         BigInteger nonce = getNonce(order);
-        RawTransaction transaction = RawTransaction.createEtherTransaction(nonce, BigInteger.valueOf(gethPrice), BigInteger.valueOf(gethLimit), order.getToAddress(), Convert.toWei(order.getValue(), Convert.Unit.ETHER).toBigInteger());
+        RawTransaction transaction = RawTransaction.createEtherTransaction(nonce, gethPrice, gethLimit, order.getToAddress(), Convert.toWei(order.getValue(), Convert.Unit.ETHER).toBigInteger());
         byte[] signedMessage = TransactionEncoder.signMessage(transaction, ALICE);
         String hexValue = Numeric.toHexString(signedMessage);
         order.setSignature(hexValue);
@@ -226,7 +188,7 @@ public class OrderService {
         Function function = new Function("transfer", Arrays.<Type>asList(new Address(order.getToAddress()), value), Collections.singletonList(new TypeReference<Bool>() {
         }));
         String data = FunctionEncoder.encode(function);
-        RawTransaction transaction = RawTransaction.createTransaction(nonce, BigInteger.valueOf(gethPrice), BigInteger.valueOf(gethLimit), tokenConfig.get("address"), data);
+        RawTransaction transaction = RawTransaction.createTransaction(nonce, gethPrice, gethLimit, tokenConfig.get("address"), data);
         byte[] signedMessage = TransactionEncoder.signMessage(transaction, ALICE);
         String hexValue = Numeric.toHexString(signedMessage);
         order.setSignature(hexValue);
@@ -251,11 +213,25 @@ public class OrderService {
         return missionMapper.accountMission(mission);
     }
 
-    public void newAccount(String tokenType, Mission mission) throws IOException, CipherException {
+    public void newAccount(String tokenType, Mission mission) throws Exception {
         if (tokenType.equalsIgnoreCase("ETH")) {
             newAccount(1, 0, mission.getId());
             mission.setComplete(mission.getComplete() + 1);
             updateMission(mission);
         }
+    }
+
+    public static Gas setGas(Gas gas) {
+        gethPrice = gas.getGasPrice();
+        gethLimit = gas.getGasLimit();
+        return getGas();
+    }
+
+    public static Gas getGas() {
+        Gas gas = new Gas();
+        gas.setGasLimit(gethLimit);
+        gas.setGasPrice(gethPrice);
+        gas.setFee(Convert.fromWei(new BigDecimal(gethLimit.multiply(gethPrice)), Convert.Unit.ETHER));
+        return gas;
     }
 }

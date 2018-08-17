@@ -25,9 +25,6 @@ import java.util.concurrent.TimeUnit;
 public class BeanConfig {
 
 
-    @Value("${mvc.geth.url}")
-    public String WALLET_SERVICE;
-
     @Bean
     public OkHttpClient okHttpClient() throws IOException {
         OkHttpClient.Builder builder = new OkHttpClient.Builder();
@@ -54,18 +51,4 @@ public class BeanConfig {
         return builder.build();
     }
 
-    @Bean
-    public Quorum quorum(OkHttpClient okHttpClient) {
-        return Quorum.build(new HttpService(WALLET_SERVICE, okHttpClient, false));
-    }
-
-    @Bean
-    public Admin admin(OkHttpClient okHttpClient) {
-        return Admin.build(new HttpService(WALLET_SERVICE, okHttpClient, false));
-    }
-
-    @Bean
-    public Web3j web3j(OkHttpClient okHttpClient) {
-        return Web3j.build(new HttpService(WALLET_SERVICE, okHttpClient, false));
-    }
 }

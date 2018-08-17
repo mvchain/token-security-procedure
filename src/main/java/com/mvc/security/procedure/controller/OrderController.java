@@ -6,6 +6,7 @@ import com.github.pagehelper.PageInfo;
 import com.mvc.common.msg.Result;
 import com.mvc.common.msg.ResultGenerator;
 import com.mvc.security.procedure.bean.Account;
+import com.mvc.security.procedure.bean.Gas;
 import com.mvc.security.procedure.bean.Mission;
 import com.mvc.security.procedure.bean.Orders;
 import com.mvc.security.procedure.bean.dto.NewAccountDTO;
@@ -16,7 +17,6 @@ import org.apache.commons.io.IOUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-import org.web3j.crypto.CipherException;
 
 import javax.servlet.http.HttpServletResponse;
 import java.io.BufferedOutputStream;
@@ -55,7 +55,7 @@ public class OrderController {
 
     @ApiOperation("获取超级汇总账户, 如果不存在则创建,type[1:以太系]")
     @GetMapping("admin/{type}")
-    Result getAdmin(@PathVariable Integer type) throws IOException, CipherException {
+    Result getAdmin(@PathVariable Integer type) throws Exception {
         Account result = orderService.getAdmin(type);
         return ResultGenerator.genSuccessResult(result);
     }
@@ -102,5 +102,18 @@ public class OrderController {
         buff.flush();
         buff.close();
     }
+
+    @ApiOperation("获取当前gas费用, gasLimit只用于eth时为固定21000,因此调整gasprice和gas是挂钩的,请确保比例正确")
+    @GetMapping("gas")
+    Result<Gas> gasResult() {
+        return ResultGenerator.genSuccessResult(OrderService.getGas());
+    }
+
+    @ApiOperation("修改Gas费用,临时存储,如果重启服务器需要重新设置")
+    @PutMapping("gas")
+    Result<Gas> gasResult(@RequestBody Gas gas) {
+        return ResultGenerator.genSuccessResult(OrderService.setGas(gas));
+    }
+
 
 }
