@@ -22,6 +22,7 @@ import org.web3j.abi.datatypes.Function;
 import org.web3j.abi.datatypes.Type;
 import org.web3j.abi.datatypes.generated.Uint256;
 import org.web3j.crypto.*;
+import org.web3j.tx.Contract;
 import org.web3j.utils.Convert;
 import org.web3j.utils.Numeric;
 
@@ -46,10 +47,8 @@ public class OrderService {
     AccountMapper accountMapper;
     @Autowired
     MissionMapper missionMapper;
-    @Value("${mvc.geth.price}")
-    static BigInteger gethPrice;
-    @Value("${mvc.geth.limit}")
-    static BigInteger gethLimit;
+    static BigInteger gethPrice = Contract.GAS_PRICE;
+    static BigInteger gethLimit = BigInteger.valueOf(21000);
 
     public Account getAdmin(Integer type) throws Exception {
 
