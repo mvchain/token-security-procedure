@@ -10,7 +10,6 @@ import com.mvc.security.procedure.dao.AccountMapper;
 import com.mvc.security.procedure.dao.MissionMapper;
 import com.mvc.security.procedure.dao.OrderMapper;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert;
@@ -166,7 +165,12 @@ public class OrderService {
         ECKeyPair ecKeyPair = ECKeyPair.create(new BigInteger(account.getPrivateKey()));
         Credentials ALICE = Credentials.create(ecKeyPair);
         BigInteger nonce = getNonce(order);
-        RawTransaction transaction = RawTransaction.createEtherTransaction(nonce, gethPrice, gethLimit, order.getToAddress(), Convert.toWei(order.getValue(), Convert.Unit.ETHER).toBigInteger());
+        BigDecimal value = order.getValue();
+        if (null == order.getOrderId()) {
+            //汇总才没有orderid, 汇总时需要扣除手续费
+            value = value.subtract(Convert.fromWei(new BigDecimal(gethLimit.multiply(gethPrice)), Convert.Unit.ETHER));
+        }
+        RawTransaction transaction = RawTransaction.createEtherTransaction(nonce, gethPrice, gethLimit, order.getToAddress(), Convert.toWei(value, Convert.Unit.ETHER).toBigInteger());
         byte[] signedMessage = TransactionEncoder.signMessage(transaction, ALICE);
         String hexValue = Numeric.toHexString(signedMessage);
         order.setSignature(hexValue);
