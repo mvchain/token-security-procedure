@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletResponse;
+import javax.validation.Valid;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -41,8 +42,15 @@ public class OrderController {
 
     @ApiOperation("批量创建账户")
     @PostMapping("account")
-    Result newAccount(@RequestBody NewAccountDTO newAccountDTO) {
+    Result newAccount(@RequestBody @Valid NewAccountDTO newAccountDTO) {
         orderService.newAccounts(newAccountDTO);
+        return ResultGenerator.genSuccessResult();
+    }
+
+    @ApiOperation("删除批量创建账户任务")
+    @DeleteMapping("account/{id}")
+    Result delAccount(@PathVariable BigInteger id) {
+        orderService.delAccount(id);
         return ResultGenerator.genSuccessResult();
     }
 

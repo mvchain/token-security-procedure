@@ -145,6 +145,7 @@ public class OrderService {
     public Mission accountMission() {
         Mission mission = new Mission();
         mission.setType(1);
+        mission.setTokenType("ETH");
         return missionMapper.accountMission(mission);
     }
 
@@ -213,6 +214,7 @@ public class OrderService {
     public Mission signMission() {
         Mission mission = new Mission();
         mission.setType(2);
+        mission.setTokenType("ETH");
         return missionMapper.accountMission(mission);
     }
 
@@ -236,5 +238,9 @@ public class OrderService {
         gas.setGasPrice(gethPrice);
         gas.setFee(Convert.fromWei(new BigDecimal(gethLimit.multiply(gethPrice)), Convert.Unit.ETHER));
         return gas;
+    }
+
+    public void delAccount(BigInteger id) {
+        missionMapper.deleteByPrimaryKey(id);
     }
 }

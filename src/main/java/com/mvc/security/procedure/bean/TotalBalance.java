@@ -2,7 +2,7 @@ package com.mvc.security.procedure.bean;
 
 import lombok.Data;
 
-import java.math.BigDecimal;
+import java.math.BigInteger;
 
 /**
  * TotalBalance
@@ -13,6 +13,9 @@ import java.math.BigDecimal;
 @Data
 public class TotalBalance {
 
+
     private String tokenType;
-    private BigDecimal total;
+
+    private BigInteger total;
+
 }
