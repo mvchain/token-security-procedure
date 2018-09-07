@@ -55,7 +55,7 @@ public class OrderController {
 
     @ApiOperation("获取超级汇总账户, 如果不存在则创建,type[1:以太系]")
     @GetMapping("admin/{type}")
-    Result getAdmin(@PathVariable Integer type) throws IOException, CipherException {
+    Result getAdmin(@PathVariable Integer type) throws Exception {
         Account result = orderService.getAdmin(type);
         return ResultGenerator.genSuccessResult(result);
     }

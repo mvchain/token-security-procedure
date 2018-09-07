@@ -43,7 +43,7 @@ public class ProjectJob {
                     orderService.newAccount(mission.getTokenType(), mission);
                 } catch (IOException e) {
                     e.printStackTrace();
-                } catch (CipherException e) {
+                } catch (Exception e) {
                     e.printStackTrace();
                 }
             }
