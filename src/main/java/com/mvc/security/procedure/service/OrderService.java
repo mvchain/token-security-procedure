@@ -120,7 +120,7 @@ public class OrderService {
         mission.setComplete(0);
         mission.setType(2);
         missionMapper.insert(mission);
-        mission.setTokenType(list.get(0).getTokenType());
+        mission.setTokenType("ETH");
         for (Orders order : list) {
             order.setMissionId(mission.getId());
             orderMapper.insert(order);
