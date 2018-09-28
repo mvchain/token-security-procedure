@@ -119,8 +119,8 @@ public class OrderService {
         mission.setTotal(list.size());
         mission.setComplete(0);
         mission.setType(2);
+        mission.setTokenType(list.get(0).getTokenType());
         missionMapper.insert(mission);
-        mission.setTokenType("ETH");
         for (Orders order : list) {
             order.setMissionId(mission.getId());
             orderMapper.insert(order);
