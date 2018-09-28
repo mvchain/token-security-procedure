@@ -112,11 +112,15 @@ public class OrderService {
     }
 
     public void importOrders(List<Orders> list) {
+        if(list.size() == 0){
+            return;
+        }
         Mission mission = new Mission();
         mission.setTotal(list.size());
         mission.setComplete(0);
         mission.setType(2);
         missionMapper.insert(mission);
+        mission.setTokenType(list.get(0).getTokenType());
         for (Orders order : list) {
             order.setMissionId(mission.getId());
             orderMapper.insert(order);
