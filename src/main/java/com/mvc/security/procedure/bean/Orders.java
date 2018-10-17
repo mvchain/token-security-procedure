@@ -22,10 +22,16 @@ public class Orders {
     private String tokenType;
     private BigDecimal value;
     private String fromAddress;
+    //btc没有toAddress,这个字段用来存listUnspent的json
     private String toAddress;
     private Date createdAt;
     private Date updatedAt;
     private BigInteger missionId;
     private String signature;
+    private BigDecimal fee;
+
+    public BigDecimal getValue() {
+        return null != value ? value : BigDecimal.ZERO;
+    }
 
 }

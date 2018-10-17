@@ -1,5 +1,6 @@
 package com.mvc.security.procedure.service;
 
+import com.alibaba.fastjson.JSON;
 import com.github.pagehelper.PageInfo;
 import com.mvc.security.procedure.bean.Account;
 import com.mvc.security.procedure.bean.Gas;
@@ -9,6 +10,11 @@ import com.mvc.security.procedure.bean.dto.NewAccountDTO;
 import com.mvc.security.procedure.dao.AccountMapper;
 import com.mvc.security.procedure.dao.MissionMapper;
 import com.mvc.security.procedure.dao.OrderMapper;
+import com.neemre.btcdcli4j.core.BitcoindException;
+import com.neemre.btcdcli4j.core.CommunicationException;
+import com.neemre.btcdcli4j.core.client.BtcdClient;
+import com.neemre.btcdcli4j.core.domain.Output;
+import com.neemre.btcdcli4j.core.domain.SignatureResult;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,7 +27,6 @@ import org.web3j.abi.datatypes.Function;
 import org.web3j.abi.datatypes.Type;
 import org.web3j.abi.datatypes.generated.Uint256;
 import org.web3j.crypto.*;
-import org.web3j.tx.Contract;
 import org.web3j.utils.Convert;
 import org.web3j.utils.Numeric;
 
@@ -46,7 +51,10 @@ public class OrderService {
     AccountMapper accountMapper;
     @Autowired
     MissionMapper missionMapper;
-    static BigInteger gethPrice = Contract.GAS_PRICE;
+    @Autowired
+    private BtcdClient btcdClient;
+
+
     static BigInteger gethLimit = BigInteger.valueOf(21000);
 
     public Account getAdmin(Integer type) throws Exception {
@@ -58,6 +66,19 @@ public class OrderService {
         if (null == account) {
             account = newAccount(type, 1, BigInteger.ZERO);
         }
+        return account;
+    }
+
+    private Account btcNewAccount(int type, int isAdmin, BigInteger missionId) throws BitcoindException, CommunicationException {
+        Account account = new Account();
+        account.setIsAdmin(isAdmin);
+        account.setType(type);
+        String address = btcdClient.getNewAddress();
+        String pvKey = btcdClient.dumpPrivKey(address);
+        account.setPrivateKey(pvKey);
+        account.setMissionId(missionId);
+        account.setAddress(address);
+        accountMapper.insert(account);
         return account;
     }
 
@@ -106,20 +127,20 @@ public class OrderService {
         List<Map<String, Object>> result = accounts.stream().map(ac -> {
             Map<String, Object> map = new HashMap<>();
             map.put("address", ac.getAddress());
+            map.put("tokenType", ac.getType() == 1 ? "ETH" : "BTC");
             return map;
         }).collect(Collectors.toList());
         return result;
     }
 
     public void importOrders(List<Orders> list) {
-        if(list.size() == 0){
+        if (list.size() == 0) {
             return;
         }
         Mission mission = new Mission();
         mission.setTotal(list.size());
         mission.setComplete(0);
         mission.setType(2);
-        mission.setTokenType(list.get(0).getTokenType());
         missionMapper.insert(mission);
         for (Orders order : list) {
             order.setMissionId(mission.getId());
@@ -141,6 +162,8 @@ public class OrderService {
             map.put("orderId", ac.getOrderId());
             map.put("type", ac.getTokenType());
             map.put("signature", ac.getSignature());
+            map.put("value", ac.getValue());
+            map.put("fee", ac.getFee());
             return map;
         }).collect(Collectors.toList());
         return result;
@@ -149,7 +172,6 @@ public class OrderService {
     public Mission accountMission() {
         Mission mission = new Mission();
         mission.setType(1);
-        mission.setTokenType("ETH");
         return missionMapper.accountMission(mission);
     }
 
@@ -173,12 +195,13 @@ public class OrderService {
         BigDecimal value = order.getValue();
         if (null == order.getOrderId()) {
             //汇总才没有orderid, 汇总时需要扣除手续费
-            value = value.subtract(Convert.fromWei(new BigDecimal(gethLimit.multiply(gethPrice)), Convert.Unit.ETHER));
+            value = value.subtract(Convert.fromWei(new BigDecimal(gethLimit.multiply(order.getFee().toBigInteger())), Convert.Unit.ETHER));
         }
-        RawTransaction transaction = RawTransaction.createEtherTransaction(nonce, gethPrice, gethLimit, order.getToAddress(), Convert.toWei(value, Convert.Unit.ETHER).toBigInteger());
+        RawTransaction transaction = RawTransaction.createEtherTransaction(nonce, order.getFee().toBigInteger(), gethLimit, order.getToAddress(), Convert.toWei(value, Convert.Unit.ETHER).toBigInteger());
         byte[] signedMessage = TransactionEncoder.signMessage(transaction, ALICE);
         String hexValue = Numeric.toHexString(signedMessage);
         order.setSignature(hexValue);
+        order.setFee(Convert.fromWei(new BigDecimal(gethLimit.multiply(order.getFee().toBigInteger())), Convert.Unit.ETHER));
         orderMapper.updateByPrimaryKey(order);
         mission.setComplete(mission.getComplete() + 1);
         updateMission(mission);
@@ -196,7 +219,7 @@ public class OrderService {
         Function function = new Function("transfer", Arrays.<Type>asList(new Address(order.getToAddress()), value), Collections.singletonList(new TypeReference<Bool>() {
         }));
         String data = FunctionEncoder.encode(function);
-        RawTransaction transaction = RawTransaction.createTransaction(nonce, gethPrice, gethLimit, tokenConfig.get("address"), data);
+        RawTransaction transaction = RawTransaction.createTransaction(nonce, order.getFee().toBigInteger(), gethLimit, tokenConfig.get("address"), data);
         byte[] signedMessage = TransactionEncoder.signMessage(transaction, ALICE);
         String hexValue = Numeric.toHexString(signedMessage);
         order.setSignature(hexValue);
@@ -227,11 +250,14 @@ public class OrderService {
             newAccount(1, 0, mission.getId());
             mission.setComplete(mission.getComplete() + 1);
             updateMission(mission);
+        } else if (tokenType.equalsIgnoreCase("BTC")) {
+            btcNewAccount(2, 0, mission.getId());
+            mission.setComplete(mission.getComplete() + 1);
+            updateMission(mission);
         }
     }
 
     public static Gas setGas(Gas gas) {
-        gethPrice = gas.getGasPrice();
         gethLimit = gas.getGasLimit();
         return getGas();
     }
@@ -239,12 +265,24 @@ public class OrderService {
     public static Gas getGas() {
         Gas gas = new Gas();
         gas.setGasLimit(gethLimit);
-        gas.setGasPrice(gethPrice);
-        gas.setFee(Convert.fromWei(new BigDecimal(gethLimit.multiply(gethPrice)), Convert.Unit.ETHER));
         return gas;
     }
 
     public void delAccount(BigInteger id) {
         missionMapper.deleteByPrimaryKey(id);
+    }
+
+    public void updateBtcOrdersSig(Orders order, Mission mission) throws BitcoindException, CommunicationException {
+        String listUnspentStr = order.getToAddress();
+        List<Output> list = JSON.parseArray(listUnspentStr, Output.class);
+        SignatureResult res = btcdClient.signRawTransactionWithWallet(order.getFromAddress(), list);
+        if (!res.getComplete()) {
+            System.out.println("签名失败");
+            return;
+        }
+        order.setSignature(res.getHex());
+        orderMapper.updateByPrimaryKey(order);
+        mission.setComplete(mission.getComplete() + 1);
+        updateMission(mission);
     }
 }

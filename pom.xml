@@ -162,6 +162,12 @@
             <version>4.12</version>
             <scope>test</scope>
         </dependency>
+
+        <dependency>
+            <groupId>com.neemre.btcd-cli4j</groupId>
+            <artifactId>btcd-cli4j-core</artifactId>
+            <version>0.5.71</version>
+        </dependency>
     </dependencies>
 
     <repositories>

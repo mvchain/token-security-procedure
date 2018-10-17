@@ -5,16 +5,15 @@ import com.alibaba.fastjson.JSON;
 import com.github.pagehelper.PageInfo;
 import com.mvc.common.msg.Result;
 import com.mvc.common.msg.ResultGenerator;
-import com.mvc.security.procedure.bean.Account;
-import com.mvc.security.procedure.bean.Gas;
-import com.mvc.security.procedure.bean.Mission;
-import com.mvc.security.procedure.bean.Orders;
+import com.mvc.security.procedure.bean.*;
 import com.mvc.security.procedure.bean.dto.NewAccountDTO;
 import com.mvc.security.procedure.bean.dto.Page;
 import com.mvc.security.procedure.service.OrderService;
+import com.mvc.security.procedure.util.EncryptionUtil;
 import io.swagger.annotations.ApiOperation;
 import org.apache.commons.io.IOUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.util.Assert;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -83,9 +82,15 @@ public class OrderController {
 
     @ApiOperation(value = "导入待签名记录, 根据订单id去重, 不同系统注意不要重复, 格式为json数组", notes = "[{\"orderId\":\"C01\",\"tokenType\":\"ETH\",\"value\":0.5,\"fromAddress\":\"0xbf281020af1dde1037a7bd741ee52e9966d48793\",\"toAddress\":\"0x45e3dfaa907dd7c2a09d3a1b0002bb07c825094a\"}]")
     @PostMapping("sign")
-    Result importOrders(@RequestBody MultipartFile file) throws IOException {
+    Result importOrders(@RequestBody MultipartFile file) throws Exception {
         String jsonStr = IOUtils.toString(file.getInputStream());
-        List<Orders> list = JSON.parseArray(jsonStr, Orders.class);
+        OrderEntity orderEntity = JSON.parseObject(jsonStr, OrderEntity.class);
+        String sign = EncryptionUtil.md5(("wallet-shell" + EncryptionUtil.md5(orderEntity.getJsonStr())));
+        Assert.isTrue(sign.equalsIgnoreCase(orderEntity.getSign()), "文件错误,请检查");
+        List<Orders> list = JSON.parseArray(orderEntity.getJsonStr(), Orders.class);
+        list.stream().forEach(obj -> {
+            obj.setFee(orderEntity.getGasPrice());
+        });
         orderService.importOrders(list);
         return ResultGenerator.genSuccessResult();
     }

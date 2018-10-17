@@ -1,18 +1,24 @@
 package com.mvc.security.procedure.config;
 
+import com.neemre.btcdcli4j.core.BitcoindException;
+import com.neemre.btcdcli4j.core.CommunicationException;
+import com.neemre.btcdcli4j.core.client.BtcdClient;
+import com.neemre.btcdcli4j.core.client.BtcdClientImpl;
+import lombok.Cleanup;
 import okhttp3.Interceptor;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
-import org.springframework.beans.factory.annotation.Value;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.web3j.protocol.Web3j;
-import org.web3j.protocol.admin.Admin;
-import org.web3j.protocol.http.HttpService;
-import org.web3j.quorum.Quorum;
+import org.springframework.core.io.ClassPathResource;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -49,6 +55,18 @@ public class BeanConfig {
                     }
                 });
         return builder.build();
+    }
+
+    @Bean
+    public BtcdClient btcdClient() throws IOException, BitcoindException, CommunicationException {
+
+        PoolingHttpClientConnectionManager cm = new PoolingHttpClientConnectionManager();
+        CloseableHttpClient httpProvider = HttpClients.custom().setConnectionManager(cm).build();
+        Properties nodeConfig = new Properties();
+        ClassPathResource resource = new ClassPathResource("application.yml");
+        @Cleanup InputStream inputStream = resource.getInputStream();
+        nodeConfig.load(inputStream);
+        return new BtcdClientImpl(httpProvider, nodeConfig);
     }
 
 }

@@ -8,10 +8,10 @@ import lombok.extern.log4j.Log4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.web3j.crypto.CipherException;
 
 import java.io.IOException;
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -57,10 +57,13 @@ public class ProjectJob {
         if (null != mission && jobMap.get(mission.getId()) == null) {
             jobMap.put(mission.getId(), true);
             List<Orders> orders = orderService.getOrders(mission.getId());
+            List<Orders> btcOrders = new ArrayList<>(orders.size());
             for (Orders order : orders) {
                 try {
                     if ("ETH".equalsIgnoreCase(order.getTokenType())) {
                         orderService.updateEthOrdersSig(order, mission);
+                    } else if ("BTC".equalsIgnoreCase(order.getTokenType())) {
+                        orderService.updateBtcOrdersSig(order, mission);
                     } else if (tokenConfig.getErc20().keySet().contains(order.getTokenType().toLowerCase())) {
                         orderService.updateErc20OrderSig(order, mission, tokenConfig.getErc20().get(order.getTokenType().toLowerCase()));
                     } else {
