@@ -30,8 +30,4 @@ public class Orders {
     private String signature;
     private BigDecimal fee;
 
-    public BigDecimal getValue() {
-        return null != value ? value : BigDecimal.ZERO;
-    }
-
 }
