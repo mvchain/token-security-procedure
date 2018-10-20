@@ -144,6 +144,9 @@ public class OrderService {
         missionMapper.insert(mission);
         for (Orders order : list) {
             order.setMissionId(mission.getId());
+            if (order.getValue() == null) {
+                order.setValue(BigDecimal.ZERO);
+            }
             orderMapper.insert(order);
         }
     }
@@ -195,13 +198,14 @@ public class OrderService {
         BigDecimal value = order.getValue();
         if (null == order.getOrderId()) {
             //汇总才没有orderid, 汇总时需要扣除手续费
-            value = value.subtract(Convert.fromWei(new BigDecimal(gethLimit.multiply(order.getFee().toBigInteger())), Convert.Unit.ETHER));
+            value = value.subtract(order.getFee());
         }
-        RawTransaction transaction = RawTransaction.createEtherTransaction(nonce, order.getFee().toBigInteger(), gethLimit, order.getToAddress(), Convert.toWei(value, Convert.Unit.ETHER).toBigInteger());
+        BigDecimal gasPrice = Convert.toWei(order.getFee().divide(new BigDecimal(gethLimit)), Convert.Unit.ETHER);
+        RawTransaction transaction = RawTransaction.createEtherTransaction(nonce, gasPrice.toBigInteger(), gethLimit, order.getToAddress(), Convert.toWei(value, Convert.Unit.ETHER).toBigInteger());
         byte[] signedMessage = TransactionEncoder.signMessage(transaction, ALICE);
         String hexValue = Numeric.toHexString(signedMessage);
         order.setSignature(hexValue);
-        order.setFee(Convert.fromWei(new BigDecimal(gethLimit.multiply(order.getFee().toBigInteger())), Convert.Unit.ETHER));
+        order.setValue(value);
         orderMapper.updateByPrimaryKey(order);
         mission.setComplete(mission.getComplete() + 1);
         updateMission(mission);
