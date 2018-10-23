@@ -12,7 +12,7 @@ spring:
         default-property-inclusion: non_null
     datasource:
             name: test
-            url: jdbc:mysql://192.168.15.31:3306/token_security_procedure_ywd?useUnicode=true&characterEncoding=UTF8
+            url: jdbc:mysql://192.168.15.31:3306/tsp?useUnicode=true&characterEncoding=UTF8
             username: root
             password: 123456
             # 使用druid数据源
@@ -45,22 +45,17 @@ swagger:
 mybatis.basepackage: com.mvc.security.procedure
 cors.allowedOrigin: '*'
 
-keyFile.path: 'C:\Users\ywd-pc\AppData\Roaming\Ethereum\rinkeby\keystore'
-
 mvc:
-  geth.url: http://192.168.213.170:8545
-#  geth.url: http://127.0.0.1:8545
-  erc20:
-    mvc:
-      address: ""
-      decimals: 18
-    ywd:
-      address: "0xbCaFA41729a20fc3BC97Fb281E5F9B9118138100"
-      decimals: 11
-    hywd:
-      address: "0x513306aF847d12aA868e7E34132207605fc4f85F"
-      decimals: 2
-    fywd:
-      address: "0x756B20F28BDDB4a251E623De59c829d078fe0624"
-      decimals: 18
+  geth:
+    price: 5000000000
+    limit: 21000
 
+node.bitcoind.rpc.protocol: http
+#node.bitcoind.rpc.host = 172.31.44.230
+node.bitcoind.rpc.host: 127.0.0.1
+node.bitcoind.rpc.port: 18332
+node.bitcoind.rpc.user: test
+node.bitcoind.rpc.password: test
+node.bitcoind.http.auth_scheme: Basic
+node.bitcoind.notification.alert.port: 5158
+node.bitcoind.notification.block.port: 5159
