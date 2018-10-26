@@ -16,8 +16,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.ClassPathResource;
 
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 
@@ -59,12 +58,19 @@ public class BeanConfig {
 
     @Bean
     public BtcdClient btcdClient() throws IOException, BitcoindException, CommunicationException {
-
         PoolingHttpClientConnectionManager cm = new PoolingHttpClientConnectionManager();
         CloseableHttpClient httpProvider = HttpClients.custom().setConnectionManager(cm).build();
         Properties nodeConfig = new Properties();
-        ClassPathResource resource = new ClassPathResource("application.yml");
-        @Cleanup InputStream inputStream = resource.getInputStream();
+
+        String filePath = System.getProperty("user.dir")
+                + "/application.yml";
+        @Cleanup InputStream inputStream = null;
+        try {
+            inputStream = new BufferedInputStream(new FileInputStream(filePath));
+        } catch (FileNotFoundException e) {
+            ClassPathResource resource = new ClassPathResource("application.yml");
+            inputStream = resource.getInputStream();
+        }
         nodeConfig.load(inputStream);
         return new BtcdClientImpl(httpProvider, nodeConfig);
     }
