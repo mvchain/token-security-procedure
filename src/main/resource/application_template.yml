@@ -48,19 +48,9 @@ cors.allowedOrigin: '*'
 keyFile.path: 'C:\Users\ywd-pc\AppData\Roaming\Ethereum\rinkeby\keystore'
 
 mvc:
-  geth.url: http://192.168.213.170:8545
-#  geth.url: http://127.0.0.1:8545
+  geth.url: http://127.0.0.1:8545
   erc20:
     mvc:
-      address: ""
-      decimals: 18
-    ywd:
-      address: "0xbCaFA41729a20fc3BC97Fb281E5F9B9118138100"
-      decimals: 11
-    hywd:
-      address: "0x513306aF847d12aA868e7E34132207605fc4f85F"
-      decimals: 2
-    fywd:
-      address: "0x756B20F28BDDB4a251E623De59c829d078fe0624"
+      address: "0xE7F6019bC38eBC35C856e4C064c8F473311AA50D"
       decimals: 18
 
