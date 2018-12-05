@@ -88,9 +88,6 @@ public class OrderController {
         String sign = EncryptionUtil.md5(("wallet-shell" + EncryptionUtil.md5(orderEntity.getJsonStr())));
         Assert.isTrue(sign.equalsIgnoreCase(orderEntity.getSign()), "文件错误,请检查");
         List<Orders> list = JSON.parseArray(orderEntity.getJsonStr(), Orders.class);
-        list.stream().forEach(obj -> {
-            obj.setFee(orderEntity.getGasPrice());
-        });
         orderService.importOrders(list);
         return ResultGenerator.genSuccessResult();
     }
@@ -101,7 +98,6 @@ public class OrderController {
         PageInfo<Mission> result = orderService.getMission(2);
         return ResultGenerator.genSuccessResult(result);
     }
-
 
     @ApiOperation("下载签名数据")
     @GetMapping("sign/{id}")

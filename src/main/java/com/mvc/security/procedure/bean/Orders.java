@@ -15,19 +15,24 @@ import java.util.Date;
  */
 @Data
 public class Orders {
+
     @Id
     private BigInteger id;
-    private BigInteger nonce;
     private String orderId;
     private String tokenType;
     private BigDecimal value;
     private String fromAddress;
-    //btc没有toAddress,这个字段用来存listUnspent的json
     private String toAddress;
+    private String feeAddress;
     private Date createdAt;
     private Date updatedAt;
     private BigInteger missionId;
     private String signature;
-    private BigDecimal fee;
+    private BigInteger nonce;
+    //0.collect 1.withdraw 2.approve
+    private Integer oprType;
+    private BigDecimal gasLimit;
+    private BigDecimal gasPrice;
+    private String contractAddress;
 
 }

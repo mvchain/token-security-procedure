@@ -1,20 +1,15 @@
 package com.mvc.security.procedure.service;
 
-import com.alibaba.fastjson.JSON;
 import com.github.pagehelper.PageInfo;
-import com.mvc.security.procedure.bean.Account;
-import com.mvc.security.procedure.bean.Gas;
-import com.mvc.security.procedure.bean.Mission;
-import com.mvc.security.procedure.bean.Orders;
+import com.mvc.security.procedure.bean.*;
 import com.mvc.security.procedure.bean.dto.NewAccountDTO;
 import com.mvc.security.procedure.dao.AccountMapper;
 import com.mvc.security.procedure.dao.MissionMapper;
 import com.mvc.security.procedure.dao.OrderMapper;
+import com.mvc.security.procedure.util.ObjectUtil;
 import com.neemre.btcdcli4j.core.BitcoindException;
 import com.neemre.btcdcli4j.core.CommunicationException;
 import com.neemre.btcdcli4j.core.client.BtcdClient;
-import com.neemre.btcdcli4j.core.domain.Output;
-import com.neemre.btcdcli4j.core.domain.SignatureResult;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,12 +19,12 @@ import org.web3j.abi.TypeReference;
 import org.web3j.abi.datatypes.Address;
 import org.web3j.abi.datatypes.Bool;
 import org.web3j.abi.datatypes.Function;
-import org.web3j.abi.datatypes.Type;
 import org.web3j.abi.datatypes.generated.Uint256;
 import org.web3j.crypto.*;
-import org.web3j.utils.Convert;
 import org.web3j.utils.Numeric;
 
+import java.beans.IntrospectionException;
+import java.lang.reflect.InvocationTargetException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.*;
@@ -42,7 +37,7 @@ import java.util.stream.Collectors;
  * @create 2018/4/18 15:20
  */
 @Service
-@Transactional(rollbackFor = Exception.class)
+@Transactional(rollbackFor = RuntimeException.class)
 public class OrderService {
 
     @Autowired
@@ -160,15 +155,29 @@ public class OrderService {
         Orders orders = new Orders();
         orders.setMissionId(id);
         List<Orders> ordersList = orderMapper.select(orders);
-        List<Map<String, Object>> result = ordersList.stream().map(ac -> {
-            Map<String, Object> map = new HashMap<>();
-            map.put("orderId", ac.getOrderId());
-            map.put("type", ac.getTokenType());
-            map.put("signature", ac.getSignature());
-            map.put("value", ac.getValue());
-            map.put("fee", ac.getFee());
-            return map;
-        }).collect(Collectors.toList());
+        List<Map<String, Object>> result = new ArrayList<>(ordersList.size());
+        ordersList.stream().forEach(obj -> {
+            BlockSign sign = new BlockSign();
+            sign.setContractAddress(obj.getContractAddress());
+            sign.setFromAddress(obj.getFromAddress());
+            sign.setOprType(obj.getOprType());
+            sign.setOrderId(obj.getOrderId());
+            sign.setSign(obj.getSignature());
+            sign.setStartedAt(0L);
+            sign.setStatus(0);
+            sign.setToAddress(obj.getToAddress());
+            sign.setTokenType(obj.getTokenType());
+            try {
+                Map<String, Object> map = ObjectUtil.convertBean(sign);
+                result.add(map);
+            } catch (IntrospectionException e) {
+                e.printStackTrace();
+            } catch (IllegalAccessException e) {
+                e.printStackTrace();
+            } catch (InvocationTargetException e) {
+                e.printStackTrace();
+            }
+        });
         return result;
     }
 
@@ -188,58 +197,59 @@ public class OrderService {
         missionMapper.updateByPrimaryKey(mission);
     }
 
-    public void updateEthOrdersSig(Orders order, Mission mission) throws Exception {
+    private String getPvKey(String address) {
         Account account = new Account();
-        account.setAddress(order.getFromAddress());
+        account.setAddress(address);
         account = accountMapper.selectOne(account);
-        ECKeyPair ecKeyPair = ECKeyPair.create(new BigInteger(account.getPrivateKey()));
-        Credentials ALICE = Credentials.create(ecKeyPair);
-        BigInteger nonce = getNonce(order);
-        BigDecimal value = order.getValue();
-        if (null == order.getOrderId()) {
-            //汇总才没有orderid, 汇总时需要扣除手续费
-            value = value.subtract(order.getFee());
+        return null == account ? null : account.getPrivateKey();
+    }
+
+    public void updateErc20OrdersSig(Orders order, Mission mission) throws Exception {
+        String pvKey = getPvKey(order.getFromAddress());
+        if (null == pvKey) {
+            order.setSignature("");
+            orderMapper.updateByPrimaryKey(order);
+            mission.setComplete(mission.getComplete() + 1);
+            updateMission(mission);
+            return;
         }
-        BigDecimal gasPrice = Convert.toWei(order.getFee().divide(new BigDecimal(gethLimit)), Convert.Unit.ETHER);
-        RawTransaction transaction = RawTransaction.createEtherTransaction(nonce, gasPrice.toBigInteger(), gethLimit, order.getToAddress(), Convert.toWei(value, Convert.Unit.ETHER).toBigInteger());
-        byte[] signedMessage = TransactionEncoder.signMessage(transaction, ALICE);
-        String hexValue = Numeric.toHexString(signedMessage);
-        order.setSignature(hexValue);
-        order.setValue(value);
-        orderMapper.updateByPrimaryKey(order);
-        mission.setComplete(mission.getComplete() + 1);
-        updateMission(mission);
-    }
-
-    public void updateErc20OrderSig(Orders order, Mission mission, Map<String, String> tokenConfig) throws Exception {
-        Account account = new Account();
-        account.setAddress(order.getFromAddress());
-        account = accountMapper.selectOne(account);
-        ECKeyPair ecKeyPair = ECKeyPair.create(new BigInteger(account.getPrivateKey()));
+        Function function = null;
+        Uint256 limit = new Uint256(new BigInteger("10000000000000").multiply(BigInteger.TEN.pow(18)));
+        if (order.getOprType().equals(2)) {
+            function = new Function(
+                    "approve",
+                    Arrays.asList(new Address(order.getFeeAddress()), limit),
+                    Collections.singletonList(new TypeReference<Bool>() {
+                    }));
+        } else if (order.getOprType().equals(1)) {
+            function = new Function(
+                    "transfer",
+                    Arrays.asList(new Address(order.getToAddress()), new Uint256(order.getValue().toBigInteger())),
+                    Collections.singletonList(new TypeReference<Bool>() {
+                    }));
+            String encodedFunction = FunctionEncoder.encode(function);
+        } else if (order.getOprType().equals(0)) {
+            function = new Function(
+                    "transferFrom",
+                    Arrays.asList(new Address(order.getToAddress()), new Address(order.getFromAddress()), new Uint256(order.getValue().toBigInteger())),
+                    Collections.singletonList(new TypeReference<Bool>() {
+                    }));
+        }
+        String encodedFunction = FunctionEncoder.encode(function);
+        RawTransaction rawTransaction = RawTransaction.createTransaction(
+                order.getNonce(),
+                order.getGasPrice().toBigInteger(),
+                order.getGasLimit().toBigInteger(),
+                order.getContractAddress(),
+                encodedFunction);
+        ECKeyPair ecKeyPair = ECKeyPair.create(new BigInteger(pvKey));
         Credentials ALICE = Credentials.create(ecKeyPair);
-        BigInteger nonce = getNonce(order);
-        // Transfer value to default format (without decimals), generally the Decimals is 18.
-        Uint256 value = new Uint256(order.getValue().multiply(new BigDecimal(Math.pow(10, Integer.parseInt(tokenConfig.get("decimals"))))).toBigInteger());
-        Function function = new Function("transfer", Arrays.<Type>asList(new Address(order.getToAddress()), value), Collections.singletonList(new TypeReference<Bool>() {
-        }));
-        String data = FunctionEncoder.encode(function);
-        RawTransaction transaction = RawTransaction.createTransaction(nonce, order.getFee().toBigInteger(), gethLimit, tokenConfig.get("address"), data);
-        byte[] signedMessage = TransactionEncoder.signMessage(transaction, ALICE);
+        byte[] signedMessage = TransactionEncoder.signMessage(rawTransaction, ALICE);
         String hexValue = Numeric.toHexString(signedMessage);
         order.setSignature(hexValue);
         orderMapper.updateByPrimaryKey(order);
         mission.setComplete(mission.getComplete() + 1);
         updateMission(mission);
-    }
-
-//    static BigInteger getNonce(Web3j web3j, String address) throws Exception {
-//        EthGetTransactionCount ethGetTransactionCount = web3j.ethGetTransactionCount(
-//                address, DefaultBlockParameterName.LATEST).sendAsync().get();
-//        return ethGetTransactionCount.getTransactionCount();
-//    }
-
-    static BigInteger getNonce(Orders order) throws Exception {
-        return order.getNonce();
     }
 
     public Mission signMission() {
@@ -254,7 +264,7 @@ public class OrderService {
             newAccount(1, 0, mission.getId());
             mission.setComplete(mission.getComplete() + 1);
             updateMission(mission);
-        } else if (tokenType.equalsIgnoreCase("BTC")) {
+        } else if (tokenType.equalsIgnoreCase("BTC") || tokenType.equalsIgnoreCase("USDT")) {
             btcNewAccount(2, 0, mission.getId());
             mission.setComplete(mission.getComplete() + 1);
             updateMission(mission);
@@ -276,17 +286,39 @@ public class OrderService {
         missionMapper.deleteByPrimaryKey(id);
     }
 
-    public void updateBtcOrdersSig(Orders order, Mission mission) throws BitcoindException, CommunicationException {
-        String listUnspentStr = order.getToAddress();
-        List<Output> list = JSON.parseArray(listUnspentStr, Output.class);
-        SignatureResult res = btcdClient.signRawTransactionWithWallet(order.getFromAddress(), list);
-        if (!res.getComplete()) {
-            System.out.println("签名失败");
-            return;
+    public void updateEthOrderSig(Orders order, Mission mission) {
+        Account account = new Account();
+        account.setAddress(order.getFromAddress());
+        account = accountMapper.selectOne(account);
+        ECKeyPair ecKeyPair = ECKeyPair.create(new BigInteger(account.getPrivateKey()));
+        Credentials ALICE = Credentials.create(ecKeyPair);
+        BigInteger nonce = order.getNonce();
+        BigInteger value = order.getValue().toBigInteger();
+        if (null == order.getOrderId()) {
+            //汇总才没有orderid, 汇总时需要扣除手续费
+            value = value.subtract(order.getGasPrice().toBigInteger());
         }
-        order.setSignature(res.getHex());
+        RawTransaction transaction = RawTransaction.createEtherTransaction(nonce, order.getGasPrice().toBigInteger(), gethLimit, order.getToAddress(), value);
+        byte[] signedMessage = TransactionEncoder.signMessage(transaction, ALICE);
+        String hexValue = Numeric.toHexString(signedMessage);
+        order.setSignature(hexValue);
         orderMapper.updateByPrimaryKey(order);
         mission.setComplete(mission.getComplete() + 1);
         updateMission(mission);
     }
+
+//
+//    public void updateBtcOrdersSig(Orders order, Mission mission) throws BitcoindException, CommunicationException {
+//        String listUnspentStr = order.getToAddress();
+//        List<Output> list = JSON.parseArray(listUnspentStr, Output.class);
+//        SignatureResult res = btcdClient.signRawTransactionWithWallet(order.getFromAddress(), list);
+//        if (!res.getComplete()) {
+//            System.out.println("签名失败");
+//            return;
+//        }
+//        order.setSignature(res.getHex());
+//        orderMapper.updateByPrimaryKey(order);
+//        mission.setComplete(mission.getComplete() + 1);
+//        updateMission(mission);
+//    }
 }

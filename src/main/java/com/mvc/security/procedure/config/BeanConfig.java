@@ -58,10 +58,10 @@ public class BeanConfig {
 
     @Bean
     public BtcdClient btcdClient() throws IOException, BitcoindException, CommunicationException {
+
         PoolingHttpClientConnectionManager cm = new PoolingHttpClientConnectionManager();
         CloseableHttpClient httpProvider = HttpClients.custom().setConnectionManager(cm).build();
         Properties nodeConfig = new Properties();
-
         String filePath = System.getProperty("user.dir")
                 + "/application.yml";
         @Cleanup InputStream inputStream = null;
@@ -72,7 +72,8 @@ public class BeanConfig {
             inputStream = resource.getInputStream();
         }
         nodeConfig.load(inputStream);
-        return new BtcdClientImpl(httpProvider, nodeConfig);
+        BtcdClientImpl btcdClient = new BtcdClientImpl(httpProvider, nodeConfig);
+        return btcdClient;
     }
 
 }
