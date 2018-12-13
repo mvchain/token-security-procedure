@@ -62,7 +62,7 @@ public class ProjectJob {
                             orderService.updateEthOrderSig(order, mission);
                         }
                     } else {
-//                        orderService.updateBtcOrdersSig(order, mission);
+                        orderService.updateBtcOrdersSig(order, mission);
                     }
                 } catch (Exception e) {
                     e.printStackTrace();

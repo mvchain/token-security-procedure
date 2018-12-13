@@ -1,7 +1,10 @@
 package com.mvc.security.procedure.service;
 
+import com.alibaba.fastjson.JSON;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.pagehelper.PageInfo;
 import com.mvc.security.procedure.bean.*;
+import com.mvc.security.procedure.bean.dto.BtcOutput;
 import com.mvc.security.procedure.bean.dto.NewAccountDTO;
 import com.mvc.security.procedure.dao.AccountMapper;
 import com.mvc.security.procedure.dao.MissionMapper;
@@ -10,7 +13,11 @@ import com.mvc.security.procedure.util.ObjectUtil;
 import com.neemre.btcdcli4j.core.BitcoindException;
 import com.neemre.btcdcli4j.core.CommunicationException;
 import com.neemre.btcdcli4j.core.client.BtcdClient;
+import com.neemre.btcdcli4j.core.domain.Output;
+import com.neemre.btcdcli4j.core.domain.OutputOverview;
+import com.neemre.btcdcli4j.core.domain.SignatureResult;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert;
@@ -22,8 +29,10 @@ import org.web3j.abi.datatypes.Function;
 import org.web3j.abi.datatypes.generated.Uint256;
 import org.web3j.crypto.*;
 import org.web3j.utils.Numeric;
+import sun.tools.jconsole.OutputViewer;
 
 import java.beans.IntrospectionException;
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -48,6 +57,10 @@ public class OrderService {
     MissionMapper missionMapper;
     @Autowired
     private BtcdClient btcdClient;
+    @Value("${usdt.propId}")
+    private Integer propId;
+
+    protected static ObjectMapper objectMapper = new ObjectMapper();
 
 
     static BigInteger gethLimit = BigInteger.valueOf(21000);
@@ -307,6 +320,83 @@ public class OrderService {
         updateMission(mission);
     }
 
+    public void updateBtcOrdersSig(Orders order, Mission mission) throws BitcoindException, CommunicationException, IOException {
+        Account account = new Account();
+        account.setAddress(order.getFromAddress());
+        account = accountMapper.selectOne(account);
+        try {
+            //每次都重新导入,防止钱包更换后需要手动重新导入数据库内容
+            btcdClient.importPrivKey(account.getPrivateKey(), account.getAddress());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        List<BtcOutput> btcOutputs = JSON.parseArray(order.getContractAddress(), BtcOutput.class);
+//        btcOutputs = btcOutputs.stream().filter(obj->obj.getAmount().compareTo(new BigDecimal("0.00000546") )> 0).collect(Collectors.toList());
+        btcOutputs = btcOutputs.subList(0, 1);
+        List<Output> unspent = getOutput(btcOutputs);
+
+        List<OutputOverview> unspentView = getOutputView(unspent);
+        //Send how much tether.
+        String simpleSendResult = objectMapper.readValue(btcdClient.remoteCall("omni_createpayload_simplesend", Arrays.asList(propId, String.valueOf(order.getValue()))).toString(), String.class);
+        //Create BTC Raw Transaction.
+        String createRawTransactionResult = btcdClient.createRawTransaction(unspentView, new HashMap<>());
+        //Add omni token(Tehter) data to the transaction.
+        String combinedResult = objectMapper.readValue(btcdClient.remoteCall("omni_createrawtx_opreturn",
+                Arrays.asList(createRawTransactionResult.toString(), simpleSendResult)).toString(),
+                String.class);
+        //.Add collect/to address.
+        String referenceResult = objectMapper.readValue(btcdClient.remoteCall("omni_createrawtx_reference",
+                Arrays.asList(combinedResult, order.getToAddress())).toString(),
+                String.class);
+        //Add fee.
+        List<OmniCreaterawtxChangeRequiredEntity> entitys = getBtcEntitys(unspent);
+
+        String changeResult = objectMapper.readValue(btcdClient.remoteCall("omni_createrawtx_change",
+                Arrays.asList(referenceResult, entitys, order.getFromAddress(), order.getGasPrice())).toString(),
+                String.class);
+        order.setSignature(changeResult);
+        orderMapper.updateByPrimaryKey(order);
+        mission.setComplete(mission.getComplete() + 1);
+        updateMission(mission);
+    }
+
+    private List<OutputOverview> getOutputView(List<Output> unspents) {
+        List<OutputOverview> list = new ArrayList<>(unspents.size());
+        unspents.forEach(unspent->{
+            OutputOverview overview = new OutputOverview();
+            overview.setVOut(unspent.getVOut());
+            overview.setTxId(unspent.getTxId());
+            list.add(overview);
+        });
+        return list;
+    }
+
+    private List<OmniCreaterawtxChangeRequiredEntity> getBtcEntitys(List<Output> unspents) {
+        List<OmniCreaterawtxChangeRequiredEntity> list = new ArrayList<>();
+        unspents.forEach(unspent -> {
+            OmniCreaterawtxChangeRequiredEntity entity = new OmniCreaterawtxChangeRequiredEntity(unspent.getTxId(), unspent.getVOut(), unspent.getScriptPubKey(), unspent.getAmount());
+            list.add(entity);
+        });
+        return list;
+    }
+
+    private List<Output> getOutput(List<BtcOutput> btcOutputs) {
+        List<Output> list = new ArrayList<>();
+        btcOutputs.forEach(btcOutput -> {
+            Output output = new Output();
+            output.setAccount(btcOutput.getAccount());
+            output.setAddress(btcOutput.getAddress());
+            output.setAmount(btcOutput.getAmount());
+            output.setConfirmations(btcOutput.getConfirmations());
+            output.setRedeemScript(btcOutput.getRedeemScript());
+            output.setScriptPubKey(btcOutput.getScriptPubKey());
+            output.setSpendable(btcOutput.getSpendable());
+            output.setTxId(btcOutput.getTxId());
+            output.setVOut(btcOutput.getVOut());
+            list.add(output);
+        });
+        return list;
+    }
 //
 //    public void updateBtcOrdersSig(Orders order, Mission mission) throws BitcoindException, CommunicationException {
 //        String listUnspentStr = order.getToAddress();

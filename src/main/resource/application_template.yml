@@ -59,3 +59,5 @@ node.bitcoind.rpc.password: test
 node.bitcoind.http.auth_scheme: Basic
 node.bitcoind.notification.alert.port: 5158
 node.bitcoind.notification.block.port: 5159
+
+usdt.propId: 1
