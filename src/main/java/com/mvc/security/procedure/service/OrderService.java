@@ -181,7 +181,7 @@ public class OrderService {
             sign.setTokenType(obj.getTokenType());
             try {
                 Map<String, Object> map = ObjectUtil.convertBean(sign);
-                if (obj.getStatus() != 9) {
+                if (null == obj.getStatus() || obj.getStatus() != 9) {
                     result.add(map);
                 }
             } catch (IntrospectionException e) {
