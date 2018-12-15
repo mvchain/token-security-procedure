@@ -29,7 +29,6 @@ import org.web3j.abi.datatypes.Function;
 import org.web3j.abi.datatypes.generated.Uint256;
 import org.web3j.crypto.*;
 import org.web3j.utils.Numeric;
-import sun.tools.jconsole.OutputViewer;
 
 import java.beans.IntrospectionException;
 import java.io.IOException;
@@ -182,7 +181,9 @@ public class OrderService {
             sign.setTokenType(obj.getTokenType());
             try {
                 Map<String, Object> map = ObjectUtil.convertBean(sign);
-                result.add(map);
+                if (obj.getStatus() != 9) {
+                    result.add(map);
+                }
             } catch (IntrospectionException e) {
                 e.printStackTrace();
             } catch (IllegalAccessException e) {
@@ -331,8 +332,14 @@ public class OrderService {
             e.printStackTrace();
         }
         List<BtcOutput> btcOutputs = JSON.parseArray(order.getContractAddress(), BtcOutput.class);
-//        btcOutputs = btcOutputs.stream().filter(obj->obj.getAmount().compareTo(new BigDecimal("0.00000546") )> 0).collect(Collectors.toList());
-        btcOutputs = btcOutputs.subList(0, 1);
+        btcOutputs = btcOutputs.stream().filter(obj -> obj.getAmount().compareTo(order.getGasPrice()) > 0).collect(Collectors.toList());
+        if (btcOutputs.size() <= 0) {
+            order.setStatus(9);
+            orderMapper.updateByPrimaryKey(order);
+            mission.setComplete(mission.getComplete() + 1);
+            updateMission(mission);
+            return;
+        }
         List<Output> unspent = getOutput(btcOutputs);
 
         List<OutputOverview> unspentView = getOutputView(unspent);
@@ -354,7 +361,12 @@ public class OrderService {
         String changeResult = objectMapper.readValue(btcdClient.remoteCall("omni_createrawtx_change",
                 Arrays.asList(referenceResult, entitys, order.getFromAddress(), order.getGasPrice())).toString(),
                 String.class);
-        order.setSignature(changeResult);
+        SignatureResult hex = btcdClient.signRawTransaction(changeResult, unspent);
+        if (hex.getComplete()) {
+            order.setSignature(hex.getHex());
+        } else {
+            order.setStatus(9);
+        }
         orderMapper.updateByPrimaryKey(order);
         mission.setComplete(mission.getComplete() + 1);
         updateMission(mission);
@@ -362,11 +374,11 @@ public class OrderService {
 
     private List<OutputOverview> getOutputView(List<Output> unspents) {
         List<OutputOverview> list = new ArrayList<>(unspents.size());
-        unspents.forEach(unspent->{
+        unspents.forEach(unspent -> {
             OutputOverview overview = new OutputOverview();
             overview.setVOut(unspent.getVOut());
             overview.setTxId(unspent.getTxId());
-            list.add(overview);
+            list.add(unspent);
         });
         return list;
     }
@@ -390,7 +402,7 @@ public class OrderService {
             output.setConfirmations(btcOutput.getConfirmations());
             output.setRedeemScript(btcOutput.getRedeemScript());
             output.setScriptPubKey(btcOutput.getScriptPubKey());
-            output.setSpendable(btcOutput.getSpendable());
+            output.setSpendable(true);
             output.setTxId(btcOutput.getTxId());
             output.setVOut(btcOutput.getVOut());
             list.add(output);

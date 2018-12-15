@@ -34,5 +34,5 @@ public class Orders {
     private BigDecimal gasLimit;
     private BigDecimal gasPrice;
     private String contractAddress;
-
+    private Integer status;
 }
