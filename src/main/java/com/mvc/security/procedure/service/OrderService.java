@@ -28,6 +28,7 @@ import org.web3j.abi.datatypes.Bool;
 import org.web3j.abi.datatypes.Function;
 import org.web3j.abi.datatypes.generated.Uint256;
 import org.web3j.crypto.*;
+import org.web3j.utils.Convert;
 import org.web3j.utils.Numeric;
 
 import java.beans.IntrospectionException;
@@ -307,12 +308,7 @@ public class OrderService {
         ECKeyPair ecKeyPair = ECKeyPair.create(new BigInteger(account.getPrivateKey()));
         Credentials ALICE = Credentials.create(ecKeyPair);
         BigInteger nonce = order.getNonce();
-        BigInteger value = order.getValue().toBigInteger();
-        if (null == order.getOrderId()) {
-            //汇总才没有orderid, 汇总时需要扣除手续费
-            value = value.subtract(order.getGasPrice().toBigInteger());
-        }
-        RawTransaction transaction = RawTransaction.createEtherTransaction(nonce, order.getGasPrice().toBigInteger(), gethLimit, order.getToAddress(), value);
+        RawTransaction transaction = RawTransaction.createEtherTransaction(nonce, order.getGasPrice().toBigInteger(), gethLimit, order.getToAddress(), Convert.toWei(order.getValue(), Convert.Unit.ETHER).toBigInteger());
         byte[] signedMessage = TransactionEncoder.signMessage(transaction, ALICE);
         String hexValue = Numeric.toHexString(signedMessage);
         order.setSignature(hexValue);
@@ -364,6 +360,7 @@ public class OrderService {
         SignatureResult hex = btcdClient.signRawTransaction(changeResult, unspent);
         if (hex.getComplete()) {
             order.setSignature(hex.getHex());
+            order.setStatus(1);
         } else {
             order.setStatus(9);
         }
