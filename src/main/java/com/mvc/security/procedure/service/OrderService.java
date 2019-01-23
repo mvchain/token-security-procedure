@@ -317,7 +317,7 @@ public class OrderService {
         updateMission(mission);
     }
 
-    public void updateBtcOrdersSig(Orders order, Mission mission) throws BitcoindException, CommunicationException, IOException {
+    public void updateUsdtOrdersSig(Orders order, Mission mission) throws BitcoindException, CommunicationException, IOException {
         Account account = new Account();
         account.setAddress(order.getFromAddress());
         account = accountMapper.selectOne(account);
@@ -406,18 +406,26 @@ public class OrderService {
         });
         return list;
     }
-//
-//    public void updateBtcOrdersSig(Orders order, Mission mission) throws BitcoindException, CommunicationException {
-//        String listUnspentStr = order.getToAddress();
-//        List<Output> list = JSON.parseArray(listUnspentStr, Output.class);
-//        SignatureResult res = btcdClient.signRawTransactionWithWallet(order.getFromAddress(), list);
-//        if (!res.getComplete()) {
-//            System.out.println("签名失败");
-//            return;
-//        }
-//        order.setSignature(res.getHex());
-//        orderMapper.updateByPrimaryKey(order);
-//        mission.setComplete(mission.getComplete() + 1);
-//        updateMission(mission);
-//    }
+
+    //
+    public void updateBtcOrdersSig(Orders order, Mission mission) throws BitcoindException, CommunicationException {
+        Account account = new Account();
+        account.setAddress(order.getFromAddress());
+        account = accountMapper.selectOne(account);
+        try {
+            //每次都重新导入,防止钱包更换后需要手动重新导入数据库内容
+            btcdClient.importPrivKey(account.getPrivateKey(), account.getAddress());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        SignatureResult res = btcdClient.signRawTransaction(order.getContractAddress(), JSON.parseArray(order.getFeeAddress(), Output.class));
+        if (!res.getComplete()) {
+            System.out.println("签名失败");
+            return;
+        }
+        order.setSignature(res.getHex());
+        orderMapper.updateByPrimaryKey(order);
+        mission.setComplete(mission.getComplete() + 1);
+        updateMission(mission);
+    }
 }

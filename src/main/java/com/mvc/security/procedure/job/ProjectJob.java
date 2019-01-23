@@ -61,8 +61,10 @@ public class ProjectJob {
                         } else {
                             orderService.updateEthOrderSig(order, mission);
                         }
-                    } else {
+                    } else if (StringUtils.isBlank(order.getToAddress())) {
                         orderService.updateBtcOrdersSig(order, mission);
+                    } else {
+                        orderService.updateUsdtOrdersSig(order, mission);
                     }
                 } catch (Exception e) {
                     e.printStackTrace();
