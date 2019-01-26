@@ -9,6 +9,7 @@ import com.mvc.security.procedure.bean.dto.NewAccountDTO;
 import com.mvc.security.procedure.dao.AccountMapper;
 import com.mvc.security.procedure.dao.MissionMapper;
 import com.mvc.security.procedure.dao.OrderMapper;
+import com.mvc.security.procedure.util.BtcUtil;
 import com.mvc.security.procedure.util.ObjectUtil;
 import com.neemre.btcdcli4j.core.BitcoindException;
 import com.neemre.btcdcli4j.core.CommunicationException;
@@ -16,6 +17,7 @@ import com.neemre.btcdcli4j.core.client.BtcdClient;
 import com.neemre.btcdcli4j.core.domain.Output;
 import com.neemre.btcdcli4j.core.domain.OutputOverview;
 import com.neemre.btcdcli4j.core.domain.SignatureResult;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -209,7 +211,7 @@ public class OrderService {
     }
 
     public void updateMission(Mission mission) {
-        missionMapper.updateByPrimaryKey(mission);
+        missionMapper.updateByPrimaryKeySelective(mission);
     }
 
     private String getPvKey(String address) {
@@ -223,7 +225,7 @@ public class OrderService {
         String pvKey = getPvKey(order.getFromAddress());
         if (null == pvKey) {
             order.setSignature("");
-            orderMapper.updateByPrimaryKey(order);
+            orderMapper.updateByPrimaryKeySelective(order);
             mission.setComplete(mission.getComplete() + 1);
             updateMission(mission);
             return;
@@ -262,7 +264,7 @@ public class OrderService {
         byte[] signedMessage = TransactionEncoder.signMessage(rawTransaction, ALICE);
         String hexValue = Numeric.toHexString(signedMessage);
         order.setSignature(hexValue);
-        orderMapper.updateByPrimaryKey(order);
+        orderMapper.updateByPrimaryKeySelective(order);
         mission.setComplete(mission.getComplete() + 1);
         updateMission(mission);
     }
@@ -312,72 +314,9 @@ public class OrderService {
         byte[] signedMessage = TransactionEncoder.signMessage(transaction, ALICE);
         String hexValue = Numeric.toHexString(signedMessage);
         order.setSignature(hexValue);
-        orderMapper.updateByPrimaryKey(order);
+        orderMapper.updateByPrimaryKeySelective(order);
         mission.setComplete(mission.getComplete() + 1);
         updateMission(mission);
-    }
-
-    public void updateUsdtOrdersSig(Orders order, Mission mission) throws BitcoindException, CommunicationException, IOException {
-        Account account = new Account();
-        account.setAddress(order.getFromAddress());
-        account = accountMapper.selectOne(account);
-        try {
-            //每次都重新导入,防止钱包更换后需要手动重新导入数据库内容
-            btcdClient.importPrivKey(account.getPrivateKey(), account.getAddress());
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        List<BtcOutput> btcOutputs = JSON.parseArray(order.getContractAddress(), BtcOutput.class);
-        btcOutputs = btcOutputs.stream().filter(obj -> obj.getAmount().compareTo(order.getGasPrice()) > 0).collect(Collectors.toList());
-        if (btcOutputs.size() <= 0) {
-            order.setStatus(9);
-            orderMapper.updateByPrimaryKey(order);
-            mission.setComplete(mission.getComplete() + 1);
-            updateMission(mission);
-            return;
-        }
-        List<Output> unspent = getOutput(btcOutputs);
-
-        List<OutputOverview> unspentView = getOutputView(unspent);
-        //Send how much tether.
-        String simpleSendResult = objectMapper.readValue(btcdClient.remoteCall("omni_createpayload_simplesend", Arrays.asList(propId, String.valueOf(order.getValue()))).toString(), String.class);
-        //Create BTC Raw Transaction.
-        String createRawTransactionResult = btcdClient.createRawTransaction(unspentView, new HashMap<>());
-        //Add omni token(Tehter) data to the transaction.
-        String combinedResult = objectMapper.readValue(btcdClient.remoteCall("omni_createrawtx_opreturn",
-                Arrays.asList(createRawTransactionResult.toString(), simpleSendResult)).toString(),
-                String.class);
-        //.Add collect/to address.
-        String referenceResult = objectMapper.readValue(btcdClient.remoteCall("omni_createrawtx_reference",
-                Arrays.asList(combinedResult, order.getToAddress())).toString(),
-                String.class);
-        //Add fee.
-        List<OmniCreaterawtxChangeRequiredEntity> entitys = getBtcEntitys(unspent);
-
-        String changeResult = objectMapper.readValue(btcdClient.remoteCall("omni_createrawtx_change",
-                Arrays.asList(referenceResult, entitys, order.getFromAddress(), order.getGasPrice())).toString(),
-                String.class);
-        SignatureResult hex = btcdClient.signRawTransaction(changeResult, unspent);
-        if (hex.getComplete()) {
-            order.setSignature(hex.getHex());
-            order.setStatus(1);
-        } else {
-            order.setStatus(9);
-        }
-        orderMapper.updateByPrimaryKey(order);
-        mission.setComplete(mission.getComplete() + 1);
-        updateMission(mission);
-    }
-
-    private List<OutputOverview> getOutputView(List<Output> unspents) {
-        List<OutputOverview> list = new ArrayList<>(unspents.size());
-        unspents.forEach(unspent -> {
-            OutputOverview overview = new OutputOverview();
-            overview.setVOut(unspent.getVOut());
-            overview.setTxId(unspent.getTxId());
-            list.add(unspent);
-        });
-        return list;
     }
 
     private List<OmniCreaterawtxChangeRequiredEntity> getBtcEntitys(List<Output> unspents) {
@@ -407,8 +346,60 @@ public class OrderService {
         return list;
     }
 
-    //
-    public void updateBtcOrdersSig(Orders order, Mission mission) throws BitcoindException, CommunicationException {
+    private String getBtcSign(Orders order, List<Output> unspent) throws BitcoindException, CommunicationException {
+        BigDecimal balance = BtcUtil.getBtcBalance(unspent);
+        Map<String, BigDecimal> outMap = new HashMap<>(2);
+        outMap.put(order.getToAddress(), order.getValue());
+        BigDecimal collectValue = balance.subtract(order.getGasPrice()).subtract(order.getValue());
+        outMap.put(order.getFromAddress(), collectValue);
+        String raw = btcdClient.createRawTransaction(BtcUtil.transOutputs(unspent), outMap);
+        SignatureResult signResult = btcdClient.signRawTransaction(raw, unspent);
+        if (signResult.getComplete()) {
+            return signResult.getHex();
+        } else {
+            return null;
+        }
+    }
+
+    public void updateBtcOrdersSig(Mission mission, List<Orders> btcList) throws Exception {
+        List<Output> unspent = btcList.size() == 0 ? null : JSON.parseArray(btcList.get(0).getContractAddress(), Output.class);
+        for (Orders order : btcList) {
+            importAccount(order);
+            String hex = null;
+            String scriptPubKey = getPubKey(unspent, order);
+            BigDecimal balance = BtcUtil.getBtcBalance(unspent);
+            Boolean isBtc = StringUtils.isBlank(order.getFeeAddress());
+            if (isBtc) {
+                //btc
+                hex = getBtcSign(order, unspent);
+            } else {
+                //usdt
+                hex = getUsdtSign(unspent, order.getFromAddress(), order.getToAddress(), order.getValue(), order.getGasPrice());
+            }
+            if (null == hex) {
+                order.setStatus(9);
+            } else {
+                order.setSignature(hex);
+
+                BigDecimal collectValue = isBtc ? balance.subtract(order.getGasPrice()).subtract(order.getValue()) : balance.subtract(order.getGasPrice());
+                String hash = btcdClient.decodeRawTransaction(hex).getTxId();
+                unspent = new ArrayList<>();
+                Output output = new Output();
+                output.setVOut(isBtc ? 1 : 0);
+                output.setTxId(hash);
+                output.setAddress(order.getFromAddress());
+                output.setScriptPubKey(scriptPubKey);
+                output.setAmount(collectValue);
+                unspent.add(output);
+            }
+            orderMapper.updateByPrimaryKeySelective(order);
+            mission.setComplete(mission.getComplete() + 1);
+            updateMission(mission);
+        }
+
+    }
+
+    private void importAccount(Orders order) {
         Account account = new Account();
         account.setAddress(order.getFromAddress());
         account = accountMapper.selectOne(account);
@@ -418,14 +409,107 @@ public class OrderService {
         } catch (Exception e) {
             e.printStackTrace();
         }
-        SignatureResult res = btcdClient.signRawTransaction(order.getContractAddress(), JSON.parseArray(order.getFeeAddress(), Output.class));
-        if (!res.getComplete()) {
-            System.out.println("签名失败");
+    }
+
+    private String getUsdtSign(List<Output> unspent, String from, String to, BigDecimal value, BigDecimal fee) throws BitcoindException, CommunicationException, IOException {
+        List<OutputOverview> unspentView = BtcUtil.transOutputs(unspent);
+        //Send how much tether.
+        String simpleSendResult = objectMapper.readValue(btcdClient.remoteCall("omni_createpayload_simplesend", Arrays.asList(propId, String.valueOf(value))).toString(), String.class);
+        //Create BTC Raw Transaction.
+        String createRawTransactionResult = btcdClient.createRawTransaction(unspentView, new HashMap<>());
+        //Add omni token(Tehter) data to the transaction.
+        String combinedResult = objectMapper.readValue(btcdClient.remoteCall("omni_createrawtx_opreturn",
+                Arrays.asList(createRawTransactionResult.toString(), simpleSendResult)).toString(),
+                String.class);
+        //.Add collect/to address.
+        String referenceResult = objectMapper.readValue(btcdClient.remoteCall("omni_createrawtx_reference",
+                Arrays.asList(combinedResult, to)).toString(),
+                String.class);
+        //Add fee.
+        List<OmniCreaterawtxChangeRequiredEntity> entitys = getBtcEntitys(unspent);
+        String changeResult = objectMapper.readValue(btcdClient.remoteCall("omni_createrawtx_change",
+                Arrays.asList(referenceResult, entitys, from, fee)).toString(),
+                String.class);
+        SignatureResult hex = btcdClient.signRawTransaction(changeResult, unspent);
+        if (hex.getComplete()) {
+            return hex.getHex();
+        } else {
+            return null;
+        }
+    }
+
+
+    private String getPubKey(List<Output> unspent, Orders order) {
+        String scriptPubKey = "";
+        for (Output obj : unspent) {
+            if (obj.getAddress().equals(order.getFromAddress())) {
+                scriptPubKey = obj.getScriptPubKey();
+            }
+        }
+        return scriptPubKey;
+    }
+
+    public void updateBtcCollectOrdersSig(Mission mission, List<Orders> list) throws BitcoindException, IOException, CommunicationException {
+        List<Orders> btcList = list.stream().filter(obj -> StringUtils.isBlank(obj.getFeeAddress())).collect(Collectors.toList());
+        List<Orders> usdtList = list.stream().filter(obj -> StringUtils.isNotBlank(obj.getFeeAddress())).collect(Collectors.toList());
+        for (Orders order : usdtList) {
+            importAccount(order);
+            List<Output> unspent = JSON.parseArray(order.getContractAddress(), Output.class);
+            String hex = getUsdtSign(unspent, order.getFromAddress(), order.getToAddress(), order.getValue(), order.getGasPrice());
+            if (null == hex) {
+                order.setStatus(9);
+            } else {
+                order.setSignature(hex);
+                addBtcOutput(btcList, hex, unspent, order);
+            }
+            orderMapper.updateByPrimaryKeySelective(order);
+            mission.setComplete(mission.getComplete() + 1);
+            updateMission(mission);
+        }
+        btcCollectSign(btcList, mission);
+
+    }
+
+    private void btcCollectSign(List<Orders> btcList, Mission mission) throws BitcoindException, CommunicationException {
+        if (btcList.size() == 0) {
             return;
         }
-        order.setSignature(res.getHex());
-        orderMapper.updateByPrimaryKey(order);
+        Orders order = btcList.get(0);
+        List<Output> unspent = JSON.parseArray(order.getContractAddress(), Output.class);
+        BigDecimal balance = BtcUtil.getBtcBalance(unspent);
+        Map<String, BigDecimal> outMap = new HashMap<>(2);
+        BigDecimal collectValue = balance.subtract(order.getGasPrice());
+        outMap.put(order.getToAddress(), collectValue);
+        String raw = btcdClient.createRawTransaction(BtcUtil.transOutputs(unspent), outMap);
+        SignatureResult signResult = btcdClient.signRawTransaction(raw, unspent);
+        if (!signResult.getComplete()) {
+            order.setStatus(9);
+        } else {
+            order.setSignature(signResult.getHex());
+            addBtcOutput(btcList, signResult.getHex(), unspent, order);
+            order.setContractAddress(null);
+        }
+        orderMapper.updateByPrimaryKeySelective(order);
         mission.setComplete(mission.getComplete() + 1);
         updateMission(mission);
     }
+
+    private void addBtcOutput(List<Orders> btcList, String hex, List<Output> unspent, Orders order) throws BitcoindException, CommunicationException {
+        if (btcList.size() == 0) {
+            return;
+        }
+        BigDecimal balance = BtcUtil.getBtcBalance(unspent);
+        BigDecimal collectValue = balance.subtract(order.getGasPrice());
+        String hash = btcdClient.decodeRawTransaction(hex).getTxId();
+        Output output = new Output();
+        output.setVOut(0);
+        output.setTxId(hash);
+        output.setAddress(order.getFromAddress());
+        output.setScriptPubKey(unspent.get(0).getScriptPubKey());
+        output.setAmount(collectValue);
+        List<Output> btcUnspent = JSON.parseArray(btcList.get(0).getContractAddress(), Output.class);
+        btcUnspent.add(output);
+        btcList.get(0).setContractAddress(JSON.toJSONString(btcUnspent));
+    }
+
 }

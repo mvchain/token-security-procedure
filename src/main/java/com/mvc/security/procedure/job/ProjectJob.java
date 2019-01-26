@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /**
  * eth job
@@ -61,14 +62,21 @@ public class ProjectJob {
                         } else {
                             orderService.updateEthOrderSig(order, mission);
                         }
-                    } else if (StringUtils.isBlank(order.getToAddress())) {
-                        orderService.updateBtcOrdersSig(order, mission);
-                    } else {
-                        orderService.updateUsdtOrdersSig(order, mission);
                     }
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
+            }
+            List<Orders> btcList = orders.stream().filter(obj -> obj.getTokenType().equalsIgnoreCase("BTC")).collect(Collectors.toList());
+            try {
+                if(btcList.size() > 0 && btcList.get(0).getOprType() == 0){
+                    //collect
+                    orderService.updateBtcCollectOrdersSig(mission, btcList);
+                } else {
+                    orderService.updateBtcOrdersSig(mission, btcList);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
             }
             jobMap.remove(mission.getId());
         }
