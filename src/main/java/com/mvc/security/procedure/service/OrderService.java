@@ -474,7 +474,6 @@ public class OrderService {
         BigDecimal collectSum = balance.subtract(btcOrders.get(0).getGasPrice().multiply(BigDecimal.valueOf(btcUnspent.size()/10 + 1)));
         Map<String, BigDecimal> outMap = new HashMap<>(1);
         outMap.put(btcOrders.get(0).getFromAddress(), collectSum);
-        System.out.println(btcUnspent);
         String raw = btcdClient.createRawTransaction(BtcUtil.transOutputs(btcUnspent), outMap);
         SignatureResult signResult = btcdClient.signRawTransaction(raw, btcUnspent);
         updateMission(signResult.getComplete(), signResult.getHex(), mission, btcOrders.get(0));
