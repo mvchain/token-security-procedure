@@ -17,6 +17,7 @@ public class Account {
 
     @Id
     private BigInteger id;
+    //1 eth 2btc
     private Integer type;
     private String address;
     private String privateKey;

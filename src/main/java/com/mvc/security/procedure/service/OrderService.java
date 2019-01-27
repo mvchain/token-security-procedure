@@ -3,6 +3,7 @@ package com.mvc.security.procedure.service;
 import com.alibaba.fastjson.JSON;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.pagehelper.PageInfo;
+import com.mvc.security.procedure.bean.Account;
 import com.mvc.security.procedure.bean.*;
 import com.mvc.security.procedure.bean.dto.BtcOutput;
 import com.mvc.security.procedure.bean.dto.NewAccountDTO;
@@ -14,12 +15,11 @@ import com.mvc.security.procedure.util.ObjectUtil;
 import com.neemre.btcdcli4j.core.BitcoindException;
 import com.neemre.btcdcli4j.core.CommunicationException;
 import com.neemre.btcdcli4j.core.client.BtcdClient;
-import com.neemre.btcdcli4j.core.domain.Output;
-import com.neemre.btcdcli4j.core.domain.OutputOverview;
-import com.neemre.btcdcli4j.core.domain.SignatureResult;
+import com.neemre.btcdcli4j.core.domain.*;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert;
@@ -30,6 +30,7 @@ import org.web3j.abi.datatypes.Bool;
 import org.web3j.abi.datatypes.Function;
 import org.web3j.abi.datatypes.generated.Uint256;
 import org.web3j.crypto.*;
+import org.web3j.crypto.RawTransaction;
 import org.web3j.utils.Convert;
 import org.web3j.utils.Numeric;
 
@@ -361,6 +362,18 @@ public class OrderService {
         }
     }
 
+    private void updateMission(Boolean result, String hex, Mission mission, Orders order) {
+        if (result) {
+            order.setStatus(0);
+            order.setSignature(hex);
+        } else {
+            order.setStatus(9);
+        }
+        orderMapper.updateByPrimaryKeySelective(order);
+        mission.setComplete(mission.getComplete() + 1);
+        updateMission(mission);
+    }
+
     public void updateBtcOrdersSig(Mission mission, List<Orders> btcList) throws Exception {
         List<Output> unspent = btcList.size() == 0 ? null : JSON.parseArray(btcList.get(0).getContractAddress(), Output.class);
         for (Orders order : btcList) {
@@ -449,25 +462,79 @@ public class OrderService {
         return scriptPubKey;
     }
 
-    public void updateBtcCollectOrdersSig(Mission mission, List<Orders> list) throws BitcoindException, IOException, CommunicationException {
-        List<Orders> btcList = list.stream().filter(obj -> StringUtils.isBlank(obj.getFeeAddress())).collect(Collectors.toList());
-        List<Orders> usdtList = list.stream().filter(obj -> StringUtils.isNotBlank(obj.getFeeAddress())).collect(Collectors.toList());
-        for (Orders order : usdtList) {
-            importAccount(order);
-            List<Output> unspent = JSON.parseArray(order.getContractAddress(), Output.class);
-            String hex = getUsdtSign(unspent, order.getFromAddress(), order.getToAddress(), order.getValue(), order.getGasPrice());
-            if (null == hex) {
-                order.setStatus(9);
-            } else {
-                order.setSignature(hex);
-                addBtcOutput(btcList, hex, unspent, order);
-            }
-            orderMapper.updateByPrimaryKeySelective(order);
-            mission.setComplete(mission.getComplete() + 1);
-            updateMission(mission);
+    public void updateBtcCollectOrdersSig(Mission mission, List<Orders> btcList) throws BitcoindException, IOException, CommunicationException {
+        //collect btc
+        List<Orders> btcOrders = btcList.stream().filter(obj -> obj.getNonce().equals(BigInteger.ZERO)).collect(Collectors.toList());
+        List<Output> btcUnspent = JSON.parseArray(btcList.get(0).getContractAddress(), Output.class);
+        if(btcUnspent.size()> 66){
+            btcUnspent = btcUnspent.subList(0, 66);
         }
-        btcCollectSign(btcList, mission);
+        List<Output> btcOutputs = new ArrayList<>();
+        BigDecimal balance = BtcUtil.getBtcBalance(btcUnspent);
+        BigDecimal collectSum = balance.subtract(btcOrders.get(0).getGasPrice().multiply(BigDecimal.valueOf(btcUnspent.size()/10 + 1)));
+        Map<String, BigDecimal> outMap = new HashMap<>(1);
+        outMap.put(btcOrders.get(0).getFromAddress(), collectSum);
+        System.out.println(btcUnspent);
+        String raw = btcdClient.createRawTransaction(BtcUtil.transOutputs(btcUnspent), outMap);
+        SignatureResult signResult = btcdClient.signRawTransaction(raw, btcUnspent);
+        updateMission(signResult.getComplete(), signResult.getHex(), mission, btcOrders.get(0));
+        if (signResult.getComplete()) {
+            String hash = btcdClient.decodeRawTransaction(signResult.getHex()).getTxId();
+            Output btcOutput = new Output();
+            btcOutput.setVOut(0);
+            btcOutput.setTxId(hash);
+            btcOutput.setAddress(btcOrders.get(0).getFromAddress());
+            btcOutput.setScriptPubKey(btcOrders.get(0).getToAddress());
+            btcOutput.setAmount(collectSum);
+            btcOutputs.add(btcOutput);
+        }
+        //send fee
+        List<Orders> feeOrders = btcList.stream().filter(obj -> obj.getNonce().equals(BigInteger.ONE)).collect(Collectors.toList());
+        if (btcOutputs.size() == 0 || feeOrders.size() == 0) return;
+        Orders feeOrder = feeOrders.get(0);
+        List<String> toAddresses = JSON.parseArray(feeOrder.getToAddress(), String.class);
+        Map<String, BigDecimal> outFeeMap = new HashMap<>(toAddresses.size() + 1);
+        toAddresses.forEach(obj -> outFeeMap.put(obj, feeOrder.getValue()));
+        outFeeMap.put(feeOrder.getFromAddress(), collectSum.subtract(feeOrder.getGasPrice()));
+        raw = btcdClient.createRawTransaction(BtcUtil.transOutputs(btcOutputs), outFeeMap);
+        System.out.println(btcOutputs);
+        signResult = btcdClient.signRawTransaction(raw, btcOutputs);
+        updateMission(signResult.getComplete(), signResult.getHex(), mission, feeOrder);
+        RawTransactionOverview rawTrans = null;
+        if (signResult.getComplete()) {
+            rawTrans = btcdClient.decodeRawTransaction(signResult.getHex());
+        }
+        // collect usdt
+        List<Orders> usdtOrders = btcList.stream().filter(obj -> obj.getNonce().equals(BigInteger.valueOf(2))).collect(Collectors.toList());
+        for (Orders usdtOrder : usdtOrders) {
+            try {
+                List<Output> usdtUnspent = new ArrayList<>();
+                Output newOutput = getOutput(usdtOrder, rawTrans);
+                usdtUnspent.add(newOutput);
+                if (null == newOutput) updateMission(false, null, mission, usdtOrder);
+                String hex = getUsdtSign(usdtUnspent, usdtOrder.getFromAddress(), usdtOrder.getToAddress(), usdtOrder.getValue(), usdtOrder.getGasPrice());
+                updateMission(null != hex, hex, mission, usdtOrder);
+            } catch (Exception e) {
+                updateMission(false, null, mission, usdtOrder);
+            }
+        }
 
+    }
+
+    private Output getOutput(Orders usdtOrder, RawTransactionOverview rawTrans) {
+        List<RawOutput> list = rawTrans.getVOut().stream().filter(obj -> obj.getScriptPubKey().getAddresses().get(0).equalsIgnoreCase(usdtOrder.getFromAddress())).collect(Collectors.toList());
+        if (list.size() == 0) {
+            return null;
+        }
+        RawOutput output = list.get(0);
+        String pubKey = output.getScriptPubKey().getHex();
+        Output btcOutput = new Output();
+        btcOutput.setVOut(output.getN());
+        btcOutput.setTxId(rawTrans.getTxId());
+        btcOutput.setAddress(usdtOrder.getFromAddress());
+        btcOutput.setScriptPubKey(pubKey);
+        btcOutput.setAmount(output.getValue());
+        return btcOutput;
     }
 
     private void btcCollectSign(List<Orders> btcList, Mission mission) throws BitcoindException, CommunicationException {
@@ -512,4 +579,21 @@ public class OrderService {
         btcList.get(0).setContractAddress(JSON.toJSONString(btcUnspent));
     }
 
+    @Async
+    public void initAccount() {
+        try {
+            List<Account> accounts = accountMapper.selectAll();
+            for (Account account : accounts) {
+                if (account.getType() == 2) {
+                    btcdClient.importPrivKey(account.getPrivateKey(), account.getAddress(), false);
+                } else {
+
+                }
+            }
+            System.out.println("init end");
+        } catch (Exception e) {
+            System.out.println("inin error: " + e.getMessage());
+        }
+
+    }
 }

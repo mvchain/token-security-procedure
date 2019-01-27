@@ -6,6 +6,7 @@ import com.mvc.security.procedure.service.OrderService;
 import lombok.extern.log4j.Log4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.CommandLineRunner;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -23,7 +24,7 @@ import java.util.stream.Collectors;
  */
 @Component
 @Log4j
-public class ProjectJob {
+public class ProjectJob implements CommandLineRunner {
 
     static ConcurrentHashMap<BigInteger, Boolean> jobMap = new ConcurrentHashMap<>();
 
@@ -69,7 +70,7 @@ public class ProjectJob {
             }
             List<Orders> btcList = orders.stream().filter(obj -> obj.getTokenType().equalsIgnoreCase("BTC")).collect(Collectors.toList());
             try {
-                if(btcList.size() > 0 && btcList.get(0).getOprType() == 0){
+                if (btcList.size() > 0 && btcList.get(0).getOprType() == 0) {
                     //collect
                     orderService.updateBtcCollectOrdersSig(mission, btcList);
                 } else {
@@ -83,4 +84,8 @@ public class ProjectJob {
     }
 
 
+    @Override
+    public void run(String... strings) throws Exception {
+        orderService.initAccount();
+    }
 }
