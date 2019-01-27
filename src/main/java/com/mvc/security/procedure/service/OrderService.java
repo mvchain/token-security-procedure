@@ -185,7 +185,7 @@ public class OrderService {
             sign.setTokenType(obj.getTokenType());
             try {
                 Map<String, Object> map = ObjectUtil.convertBean(sign);
-                if (null == obj.getStatus() || obj.getStatus() != 9) {
+                if (StringUtils.isNotBlank(obj.getSignature())) {
                     result.add(map);
                 }
             } catch (IntrospectionException e) {
@@ -462,16 +462,21 @@ public class OrderService {
         return scriptPubKey;
     }
 
+    private Boolean isAccount(String address) {
+        Account account = new Account();
+        account.setAddress(address);
+        account = accountMapper.selectOne(account);
+        return null != account;
+    }
+
     public void updateBtcCollectOrdersSig(Mission mission, List<Orders> btcList) throws BitcoindException, IOException, CommunicationException {
         //collect btc
         List<Orders> btcOrders = btcList.stream().filter(obj -> obj.getNonce().equals(BigInteger.ZERO)).collect(Collectors.toList());
         List<Output> btcUnspent = JSON.parseArray(btcList.get(0).getContractAddress(), Output.class);
-        if(btcUnspent.size()> 66){
-            btcUnspent = btcUnspent.subList(0, 66);
-        }
+        btcUnspent = btcUnspent.stream().filter(obj -> obj.getAmount().compareTo(btcOrders.get(0).getGasPrice()) > 0 && isAccount(obj.getAddress())).collect(Collectors.toList());
         List<Output> btcOutputs = new ArrayList<>();
         BigDecimal balance = BtcUtil.getBtcBalance(btcUnspent);
-        BigDecimal collectSum = balance.subtract(btcOrders.get(0).getGasPrice().multiply(BigDecimal.valueOf(btcUnspent.size()/10 + 1)));
+        BigDecimal collectSum = balance.subtract(btcOrders.get(0).getGasPrice().multiply(BigDecimal.valueOf(btcUnspent.size() / 10 + 1)));
         Map<String, BigDecimal> outMap = new HashMap<>(1);
         outMap.put(btcOrders.get(0).getFromAddress(), collectSum);
         String raw = btcdClient.createRawTransaction(BtcUtil.transOutputs(btcUnspent), outMap);
@@ -496,7 +501,6 @@ public class OrderService {
         toAddresses.forEach(obj -> outFeeMap.put(obj, feeOrder.getValue()));
         outFeeMap.put(feeOrder.getFromAddress(), collectSum.subtract(feeOrder.getGasPrice()));
         raw = btcdClient.createRawTransaction(BtcUtil.transOutputs(btcOutputs), outFeeMap);
-        System.out.println(btcOutputs);
         signResult = btcdClient.signRawTransaction(raw, btcOutputs);
         updateMission(signResult.getComplete(), signResult.getHex(), mission, feeOrder);
         RawTransactionOverview rawTrans = null;
