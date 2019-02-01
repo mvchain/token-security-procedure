@@ -499,7 +499,7 @@ public class OrderService {
         List<String> toAddresses = JSON.parseArray(feeOrder.getToAddress(), String.class);
         Map<String, BigDecimal> outFeeMap = new HashMap<>(toAddresses.size() + 1);
         toAddresses.forEach(obj -> outFeeMap.put(obj, feeOrder.getValue()));
-        outFeeMap.put(feeOrder.getFromAddress(), collectSum.subtract(feeOrder.getGasPrice()));
+        outFeeMap.put(feeOrder.getFromAddress(), collectSum.subtract(feeOrder.getGasPrice().multiply(BigDecimal.valueOf(toAddresses.size()*2))));
         raw = btcdClient.createRawTransaction(BtcUtil.transOutputs(btcOutputs), outFeeMap);
         signResult = btcdClient.signRawTransaction(raw, btcOutputs);
         updateMission(signResult.getComplete(), signResult.getHex(), mission, feeOrder);
