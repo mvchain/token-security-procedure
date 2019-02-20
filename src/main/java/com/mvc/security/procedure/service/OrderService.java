@@ -36,6 +36,7 @@ import org.web3j.utils.Convert;
 import org.web3j.utils.Numeric;
 
 import java.beans.IntrospectionException;
+import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.math.BigDecimal;
@@ -607,5 +608,27 @@ public class OrderService {
             System.out.println("inin error: " + e.getMessage());
         }
 
+    }
+
+    public String mysqlBakcup(String mysqlPath, String password) {
+        String fileName = "C:/backup.sql";
+
+        //拼接命令行的命令
+        StringBuilder stringBuilder = new StringBuilder();
+        stringBuilder.append(mysqlPath + "\\bin\\mysqldump.exe").append(" --opt").append(" -h").append("127.0.0.1");
+        stringBuilder.append(" --user=").append("root").append(" --password=").append(password).append(" --lock-all-tables=true");
+        stringBuilder.append(" --result-file=").append(fileName).append(" --default-character-set=utf8 ").append("tsp");
+        try {
+            //调用外部执行exe文件的javaAPI
+            Process process = Runtime.getRuntime().exec(stringBuilder.toString());
+            if (process.waitFor() == 0) {// 0 表示线程正常终止。
+                return null;
+            }
+        } catch (IOException e) {
+            return e.getMessage();
+        } catch (InterruptedException e) {
+            return e.getMessage();
+        }
+        return null;
     }
 }

@@ -12,6 +12,7 @@ import springfox.documentation.swagger2.annotations.EnableSwagger2;
  *
  * @author qiyichen
  * @create 2018/4/18 13:55
+ *
  */
 @SpringBootApplication
 @EnableScheduling

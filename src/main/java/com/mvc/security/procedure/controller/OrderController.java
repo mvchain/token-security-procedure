@@ -10,7 +10,10 @@ import com.mvc.security.procedure.bean.dto.NewAccountDTO;
 import com.mvc.security.procedure.bean.dto.Page;
 import com.mvc.security.procedure.service.OrderService;
 import com.mvc.security.procedure.util.EncryptionUtil;
+import io.swagger.annotations.ApiImplicitParam;
+import io.swagger.annotations.ApiImplicitParams;
 import io.swagger.annotations.ApiOperation;
+import io.swagger.annotations.ApiParam;
 import org.apache.commons.io.IOUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.Assert;
@@ -124,5 +127,19 @@ public class OrderController {
         return ResultGenerator.genSuccessResult(OrderService.setGas(gas));
     }
 
+    @ApiOperation("数据库备份")
+//    @ApiImplicitParams({
+//            @ApiImplicitParam(paramType = "query", name = "mysqlPath", value = "mysql数据库的安装路径", required = true, dataType = "string"),
+//            @ApiImplicitParam(paramType = "query", name = "password", value = "mysql数据库的密码", required = true, dataType = "string")
+//    })
+    @GetMapping("backup")
+    Result getMysqlDumpFile(@RequestParam(required = true) @ApiParam("mysql数据库的安装路径") String mysqlPath,
+                            @RequestParam(required = true) @ApiParam("mysql数据库的密码") String password) {
+        String error = orderService.mysqlBakcup(mysqlPath, password);
+        if (error != null) {
+            return ResultGenerator.genFailResult(error);
+        }
+        return ResultGenerator.genSuccessResult();
+    }
 
 }
