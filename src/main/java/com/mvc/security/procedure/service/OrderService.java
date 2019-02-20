@@ -16,6 +16,7 @@ import com.neemre.btcdcli4j.core.BitcoindException;
 import com.neemre.btcdcli4j.core.CommunicationException;
 import com.neemre.btcdcli4j.core.client.BtcdClient;
 import com.neemre.btcdcli4j.core.domain.*;
+import lombok.extern.log4j.Log4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -50,6 +51,7 @@ import java.util.stream.Collectors;
  */
 @Service
 @Transactional(rollbackFor = RuntimeException.class)
+@Log4j
 public class OrderService {
 
     @Autowired
@@ -426,23 +428,29 @@ public class OrderService {
 
     private String getUsdtSign(List<Output> unspent, String from, String to, BigDecimal value, BigDecimal fee) throws BitcoindException, CommunicationException, IOException {
         List<OutputOverview> unspentView = BtcUtil.transOutputs(unspent);
+        log.info(JSON.toJSONString("unspent:" + unspentView));
         //Send how much tether.
         String simpleSendResult = objectMapper.readValue(btcdClient.remoteCall("omni_createpayload_simplesend", Arrays.asList(propId, String.valueOf(value))).toString(), String.class);
+        log.info(String.format("omni_createpayload_simplesend:%s", simpleSendResult));
         //Create BTC Raw Transaction.
         String createRawTransactionResult = btcdClient.createRawTransaction(unspentView, new HashMap<>());
+        log.info(String.format("createRawTransaction:%s", createRawTransactionResult));
         //Add omni token(Tehter) data to the transaction.
         String combinedResult = objectMapper.readValue(btcdClient.remoteCall("omni_createrawtx_opreturn",
                 Arrays.asList(createRawTransactionResult.toString(), simpleSendResult)).toString(),
                 String.class);
+        log.info(String.format("omni_createrawtx_opreturn:%s", combinedResult));
         //.Add collect/to address.
         String referenceResult = objectMapper.readValue(btcdClient.remoteCall("omni_createrawtx_reference",
                 Arrays.asList(combinedResult, to)).toString(),
                 String.class);
+        log.info(String.format("omni_createrawtx_reference:%s", referenceResult));
         //Add fee.
         List<OmniCreaterawtxChangeRequiredEntity> entitys = getBtcEntitys(unspent);
         String changeResult = objectMapper.readValue(btcdClient.remoteCall("omni_createrawtx_change",
                 Arrays.asList(referenceResult, entitys, from, fee)).toString(),
                 String.class);
+        log.info(String.format("omni_createrawtx_change:%s", changeResult));
         SignatureResult hex = btcdClient.signRawTransaction(changeResult, unspent);
         if (hex.getComplete()) {
             return hex.getHex();
@@ -514,6 +522,7 @@ public class OrderService {
                 List<Output> usdtUnspent = new ArrayList<>();
                 Output newOutput = getOutput(usdtOrder, rawTrans);
                 usdtUnspent.add(newOutput);
+                log.info(String.format("newOutput:%s", newOutput));
                 if (null == newOutput) updateMission(false, null, mission, usdtOrder);
                 String hex = getUsdtSign(usdtUnspent, usdtOrder.getFromAddress(), usdtOrder.getToAddress(), usdtOrder.getValue(), usdtOrder.getGasPrice());
                 updateMission(null != hex, hex, mission, usdtOrder);

@@ -5,6 +5,7 @@ import com.neemre.btcdcli4j.core.CommunicationException;
 import com.neemre.btcdcli4j.core.client.BtcdClient;
 import com.neemre.btcdcli4j.core.client.BtcdClientImpl;
 import lombok.Cleanup;
+import lombok.extern.log4j.Log4j;
 import okhttp3.Interceptor;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -27,6 +28,7 @@ import java.util.concurrent.TimeUnit;
  * @create 2018/3/8 19:53
  */
 @Configuration
+@Log4j
 public class BeanConfig {
 
 
@@ -58,7 +60,7 @@ public class BeanConfig {
 
     @Bean
     public BtcdClient btcdClient() throws IOException, BitcoindException, CommunicationException {
-
+        log.info("btcd init");
         PoolingHttpClientConnectionManager cm = new PoolingHttpClientConnectionManager();
         CloseableHttpClient httpProvider = HttpClients.custom().setConnectionManager(cm).build();
         Properties nodeConfig = new Properties();
